@@ -251,7 +251,8 @@ export function registerControlUiAndPairingSuite(): void {
   test("clears self-declared scopes for trusted-proxy control ui without device identity", async () => {
     await configureTrustedProxyControlUiAuth();
     const { publicKeyRawBase64UrlFromPem } = await import("../infra/device-identity.js");
-    const { requestDevicePairing } = await import("../infra/device-pairing.js");
+    const { rejectDevicePairing, requestDevicePairing } =
+      await import("../infra/device-pairing.js");
     const { identity } = await createOperatorIdentityFixture("openclaw-control-ui-trusted-proxy-");
     const pendingRequest = await requestDevicePairing({
       deviceId: identity.deviceId,
@@ -261,26 +262,30 @@ export function registerControlUiAndPairingSuite(): void {
       clientId: CONTROL_UI_CLIENT.id,
       clientMode: CONTROL_UI_CLIENT.mode,
     });
-    await withGatewayServer(async ({ port }) => {
-      const ws = await openWs(port, TRUSTED_PROXY_CONTROL_UI_HEADERS);
-      try {
-        const res = await connectReq(ws, {
-          skipDefaultAuth: true,
-          scopes: ["operator.admin"],
-          device: null,
-          client: { ...CONTROL_UI_CLIENT },
-        });
-        expect(res.ok).toBe(true);
-        expect((res.payload as { auth?: unknown } | undefined)?.auth).toBeUndefined();
+    try {
+      await withGatewayServer(async ({ port }) => {
+        const ws = await openWs(port, TRUSTED_PROXY_CONTROL_UI_HEADERS);
+        try {
+          const res = await connectReq(ws, {
+            skipDefaultAuth: true,
+            scopes: ["operator.admin"],
+            device: null,
+            client: { ...CONTROL_UI_CLIENT },
+          });
+          expect(res.ok).toBe(true);
+          expect((res.payload as { auth?: unknown } | undefined)?.auth).toBeUndefined();
 
-        await expectStatusMissingScopeButHealthOk(ws);
-        await expectAdminRpcDenied(ws);
-        await expectTalkSecretsDenied(ws);
-        await expectDevicePairApproveDenied(ws, pendingRequest.request.requestId);
-      } finally {
-        ws.close();
-      }
-    });
+          await expectStatusMissingScopeButHealthOk(ws);
+          await expectAdminRpcDenied(ws);
+          await expectTalkSecretsDenied(ws);
+          await expectDevicePairApproveDenied(ws, pendingRequest.request.requestId);
+        } finally {
+          ws.close();
+        }
+      });
+    } finally {
+      await rejectDevicePairing(pendingRequest.request.requestId);
+    }
   });
 
   test("allows localhost control ui without device identity when insecure auth is enabled", async () => {
