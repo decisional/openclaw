@@ -88,8 +88,4 @@ enum ExecEnvInvocationUnwrapper {
         guard !expectsOptionValue, idx < command.count else { return nil }
         return UnwrapResult(command: Array(command[idx...]), usesModifiers: usesModifiers)
     }
-
-    static func unwrapDispatchWrappersForResolution(_ command: [String]) -> [String] {
-        ExecWrapperResolution.unwrapDispatchWrappersForResolution(command)
-    }
 }

@@ -44,13 +44,12 @@ struct ExecCommandResolution {
                 return []
             }
             var resolutions: [ExecCommandResolution] = []
-            resolutions.reserveCapacity(segments.count)
             for segment in segments {
-                guard let resolution = self.resolveShellSegmentExecutable(segment, cwd: cwd, env: env)
-                else {
+                let segmentResolutions = self.resolveShellSegmentExecutions(segment, cwd: cwd, env: env)
+                guard !segmentResolutions.isEmpty else {
                     return []
                 }
-                resolutions.append(resolution)
+                resolutions.append(contentsOf: segmentResolutions)
             }
             return resolutions
         }
@@ -113,18 +112,14 @@ struct ExecCommandResolution {
             cwd: cwd)
     }
 
-    private static func resolveShellSegmentExecutable(
+    private static func resolveShellSegmentExecutions(
         _ segment: String,
         cwd: String?,
-        env: [String: String]?) -> ExecCommandResolution?
+        env: [String: String]?) -> [ExecCommandResolution]
     {
         let tokens = self.tokenizeShellWords(segment)
-        guard !tokens.isEmpty else { return nil }
-        let effective = ExecWrapperResolution.unwrapDispatchWrappersForResolution(tokens)
-        guard let raw = effective.first?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
-            return nil
-        }
-        return self.resolveExecutable(rawExecutable: raw, cwd: cwd, env: env)
+        guard !tokens.isEmpty else { return [] }
+        return self.resolveForAllowlist(command: tokens, rawCommand: nil, cwd: cwd, env: env)
     }
 
     private static func collectAllowAlwaysPatterns(
@@ -139,6 +134,11 @@ struct ExecCommandResolution {
             return
         }
 
+        // Allow-always persistence intentionally peels known dispatch wrappers
+        // directly so approvals stay scoped to the launched executable instead of
+        // the wrapper binary. The allowlist path stays stricter for semantic
+        // wrapper usage (for example `env FOO=bar ...`) and may still require
+        // re-approval in those cases.
         switch ExecWrapperResolution.unwrapKnownDispatchWrapperInvocation(command) {
         case .blocked:
             return

@@ -264,6 +264,22 @@ struct ExecAllowlistTests {
         #expect(resolutions[1].executableName == "whoami")
     }
 
+    @Test func `resolve for allowlist recurses through nested shell wrappers after dispatch wrappers`() throws {
+        let tmp = try makeTempDirForTests()
+        let whoami = tmp.appendingPathComponent("whoami")
+        try makeExecutableForTests(at: whoami)
+
+        let resolutions = ExecCommandResolution.resolveForAllowlist(
+            command: ["/bin/sh", "-lc", "nice /bin/zsh -lc whoami"],
+            rawCommand: nil,
+            cwd: tmp.path,
+            env: ["PATH": "\(tmp.path):/usr/bin:/bin"])
+
+        #expect(resolutions.count == 1)
+        #expect(resolutions[0].resolvedPath == whoami.path)
+        #expect(resolutions[0].executableName == "whoami")
+    }
+
     @Test func `resolve for allowlist unwraps direct dispatch wrappers with canonical raw command`() {
         let command = ["/usr/bin/nice", "/usr/bin/printf", "ok"]
         let resolutions = ExecCommandResolution.resolveForAllowlist(
