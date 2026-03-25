@@ -253,6 +253,19 @@ describe("profile commands", () => {
     );
   });
 
+  it("refuses to create when a managed manifest already exists but is unreadable", async () => {
+    const root = await fs.mkdtemp(path.join(process.cwd(), ".tmp-profile-bad-manifest-"));
+    process.env.OPENCLAW_HOME = root;
+    const runtime = createNonExitingRuntime();
+    const profileRoot = path.join(root, ".openclaw", "profiles", "broken");
+    await fs.mkdir(profileRoot, { recursive: true });
+    await fs.writeFile(path.join(profileRoot, "profile.json"), "{not-json", "utf8");
+
+    await expect(profileCreateCommand(runtime, "broken", {})).rejects.toThrow(
+      /manifest exists but is unreadable/i,
+    );
+  });
+
   it("refuses to clone into a destination id already used by a legacy profile", async () => {
     const root = await fs.mkdtemp(path.join(process.cwd(), ".tmp-profile-clone-shadow-"));
     process.env.OPENCLAW_HOME = root;

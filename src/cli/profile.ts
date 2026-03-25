@@ -119,7 +119,12 @@ export function applyCliProfileEnv(params: {
     delete env.OPENCLAW_PROFILE_AUTO_PATHS;
   }
 
-  if (!env.OPENCLAW_GATEWAY_PORT?.trim() && !explicitStateDir && !explicitConfigPath) {
+  if (
+    !env.OPENCLAW_GATEWAY_PORT?.trim() &&
+    !explicitStateDir &&
+    !explicitConfigPath &&
+    (selected.exists || selected.id === "dev")
+  ) {
     env.OPENCLAW_GATEWAY_PORT = String(selected.effectiveGatewayPort);
   }
 }

@@ -195,6 +195,26 @@ describe("applyCliProfileEnv", () => {
       expect(env.OPENCLAW_CONFIG_PATH).toBe(path.join(legacyDir, "openclaw.json"));
     });
   });
+
+  it("does not inject OPENCLAW_GATEWAY_PORT for a brand-new implicit profile", () => {
+    const env: Record<string, string | undefined> = {
+      OPENCLAW_HOME: "/srv/openclaw-home",
+    };
+    applyCliProfileEnv({
+      profile: "fresh",
+      env,
+      homedir: () => "/home/fallback",
+    });
+
+    expect(env.OPENCLAW_STATE_DIR).toBe(
+      path.join("/srv/openclaw-home", ".openclaw", "profiles", "fresh", "state"),
+    );
+    expect(env.OPENCLAW_CONFIG_PATH).toBe(
+      path.join("/srv/openclaw-home", ".openclaw", "profiles", "fresh", "config", "openclaw.json"),
+    );
+    expect(env.OPENCLAW_PROFILE_AUTO_PATHS).toBe("1");
+    expect(env.OPENCLAW_GATEWAY_PORT).toBeUndefined();
+  });
 });
 
 describe("formatCliCommand", () => {

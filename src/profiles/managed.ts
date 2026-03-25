@@ -91,6 +91,18 @@ export function resolveManagedProfileManifestPath(
   return path.join(resolveManagedProfileRoot(profileId, env, homedir), "profile.json");
 }
 
+export function managedProfileManifestExists(
+  profileId: string,
+  env: NodeJS.ProcessEnv = process.env,
+  homedir: () => string = envHomedir(env),
+): boolean {
+  try {
+    return fs.existsSync(resolveManagedProfileManifestPath(profileId, env, homedir));
+  } catch {
+    return false;
+  }
+}
+
 export function normalizeProfileId(raw?: string | null): string {
   return normalizeProfileName(raw) ?? DEFAULT_PROFILE_ID;
 }
