@@ -4,9 +4,9 @@ import {
 } from "openclaw/plugin-sdk/provider-auth";
 import { defineSingleProviderPluginEntry } from "openclaw/plugin-sdk/provider-entry";
 import { createToolStreamWrapper } from "openclaw/plugin-sdk/provider-stream";
-import { applyXaiModelCompat, normalizeXaiModelId } from "./api.js";
 import { resolveProviderWebSearchPluginConfig } from "openclaw/plugin-sdk/provider-web-search";
 import { normalizeSecretInputString } from "openclaw/plugin-sdk/secret-input";
+import { applyXaiModelCompat, normalizeXaiModelId } from "./api.js";
 import { applyXaiConfig, XAI_DEFAULT_MODEL_REF } from "./onboard.js";
 import { buildXaiProvider } from "./provider-catalog.js";
 import { isModernXaiModel, resolveXaiForwardCompatModel } from "./provider-models.js";
@@ -16,6 +16,7 @@ import {
   createXaiToolPayloadCompatibilityWrapper,
 } from "./stream.js";
 import { createXaiWebSearchProvider } from "./web-search.js";
+import { createXSearchTool } from "./x-search.js";
 
 const PROVIDER_ID = "xai";
 
@@ -136,5 +137,13 @@ export default defineSingleProviderPluginEntry({
   },
   register(api) {
     api.registerWebSearchProvider(createXaiWebSearchProvider());
+    api.registerTool(
+      (ctx) =>
+        createXSearchTool({
+          config: ctx.config,
+          runtimeConfig: ctx.runtimeConfig,
+        }),
+      { name: "x_search" },
+    );
   },
 });
