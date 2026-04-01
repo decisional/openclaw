@@ -43,6 +43,8 @@ For fastest triage, include all of the following:
 - Explicit statement that the report does not rely on adversarial operators sharing one gateway host/config.
 - Scope check explaining why the report is **not** covered by the Out of Scope section below.
 - For command-risk/parity reports (for example obfuscation detection differences), a concrete boundary-bypass path is required (auth/approval/allowlist/sandbox). Parity-only findings are treated as hardening, not vulnerabilities.
+- For predictability/randomness reports, show that the value is itself an authorization-bearing secret, capability, or cryptographic boundary, not only an identifier, label, delay, or UI/run-bookkeeping value.
+- For hook/session-routing reports, show a real auth/policy/sandbox boundary bypass rather than only steering through operator-enabled routing/session-key features.
 
 Reports that miss these requirements may be closed as `invalid` or `no-action`.
 
@@ -67,7 +69,16 @@ These are frequently reported but are typically closed with no code change:
 - Reports that depend on replacing or rewriting an already-approved executable path on a trusted host (same-path inode/content swap) without showing an untrusted path to perform that write.
 - Reports that depend on same-user control of user-writable PATH directories or CLI bootstrap/search locations (for example `~/.local/bin`, package-manager user bins, or local shims) without demonstrating a separate untrusted write primitive. These are trusted-local-state hardening issues, not standalone vulnerabilities.
 - Reports that depend on pre-existing symlinked skill/workspace filesystem state (for example symlink chains involving `skills/*/SKILL.md`) without showing an untrusted path that can create/control that state.
+<<<<<<< Updated upstream
 - Reports that describe generic symlink/TOCTOU arbitrary-read risk in bundled/plugin loaders without reproducing against the shipped fd-pinned boundary-verified open path or without showing an untrusted path that can create/control the prerequisite filesystem state.
+=======
+- Reports that only show predictable IDs, slugs, approval labels, jitter/delay values, or other non-secret identifiers generated with non-cryptographic randomness, without showing that the value gates authorization or protects a secret.
+- Reports that rely on broad hook/session routing configuration (for example `hooks.allowRequestSessionKey=true` or permissive `hooks.allowedSessionKeyPrefixes`) to claim cross-agent authorization bypass, without showing a separate auth/policy/sandbox boundary failure.
+- Reports that treat installed plugin ordering, priority, prompt contribution precedence, or inter-plugin override behavior as a vulnerability without showing untrusted plugin installation/load or another boundary bypass.
+- Reports that infer a symlink race from use of host tmp paths alone, without demonstrating attacker control of the created temp path or another writable shared primitive. Use of `os.tmpdir()` plus a private temp directory is not, by itself, a cross-user write primitive.
+- Reports that only show multiple documented operator auth modes coexisting (for example trusted-proxy plus loopback/shared-token fallback) without demonstrating an untrusted-origin or untrusted-network path that crosses the documented auth boundary.
+- Reports that only show bounded pre-auth request parsing, buffering, or concurrency work on a public webhook path when existing request size/time limits already constrain impact and no auth bypass, practical brute-force path, or material unbounded exhaustion is demonstrated.
+>>>>>>> Stashed changes
 - Missing HSTS findings on default local/loopback deployments.
 - Slack webhook signature findings when HTTP mode already uses signing-secret verification.
 - Discord inbound webhook signature findings for paths not used by this repo's Discord integration.
@@ -146,7 +157,13 @@ Plugins/extensions are part of OpenClaw's trusted computing base for a gateway.
 - Reports whose only claim is heuristic/parity drift in command-risk detection (for example obfuscation-pattern checks) across exec surfaces, without a demonstrated trust-boundary bypass. These are hardening-only findings and are not vulnerabilities; triage may close them as `invalid`/`no-action` or track them separately as low/informational hardening.
 - Reports whose only claim is that an ACP-exposed tool can indirectly execute commands, mutate host state, or reach another privileged tool/runtime without demonstrating a bypass of ACP prompt/approval, allowlist enforcement, sandboxing, or another documented trust boundary. These are hardening-only findings, not vulnerabilities.
 - Reports whose only claim is that exec approvals do not semantically model every interpreter/runtime loader form, subcommand, flag combination, package script, or transitive module/config import. Exec approvals bind exact request context and best-effort direct local file operands; they are not a complete semantic model of everything a runtime may load.
+<<<<<<< Updated upstream
 - Reports whose only claim is shell-wrapper or interpreter semantic drift beyond the approved direct local operand (for example RC/init files, runtime loader config, or transitive imports) without a demonstrated bypass of the shipped allowlist or approval boundary. These are hardening-only unless the report shows the shipped boundary can actually be satisfied by the wrong local target.
+=======
+- Reports whose only claim is that operator-enabled hook/session-key routing features weaken agent-to-agent isolation without bypassing auth, allowlist, approval, sandbox, or another documented boundary.
+- Reports whose only claim is that an identifier generated with non-cryptographic randomness might be guessable, when that identifier is not itself an authorization token, capability, or cryptographic secret.
+- Reports whose only claim is bounded pre-auth parsing, buffering, or concurrency work on a public route when existing limits already constrain impact and no practical auth bypass, brute-force path, or material unbounded exhaustion is shown.
+>>>>>>> Stashed changes
 - Exposed secrets that are third-party/user-controlled credentials (not OpenClaw-owned and not granting access to OpenClaw-operated infrastructure/services) without demonstrated OpenClaw impact
 - Reports whose only claim is host-side exec when sandbox runtime is disabled/unavailable (documented default behavior in the trusted-operator model), without a boundary bypass.
 - Reports whose only claim is that a platform-provided upload destination URL is untrusted (for example Microsoft Teams `fileConsent/invoke` `uploadInfo.uploadUrl`) without proving attacker control in an authenticated production flow.
