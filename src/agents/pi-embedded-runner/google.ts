@@ -9,7 +9,7 @@ import {
   sanitizeProviderReplayHistoryWithPlugin,
   validateProviderReplayTurnsWithPlugin,
 } from "../../plugins/provider-runtime.js";
-import type { ProviderRuntimeModel } from "../../plugins/types.js";
+import type { ProviderReplaySessionState, ProviderRuntimeModel } from "../../plugins/types.js";
 import {
   hasInterSessionUserProvenance,
   normalizeInputProvenance,
@@ -535,6 +535,40 @@ type ModelSnapshotEntry = {
 
 const MODEL_SNAPSHOT_CUSTOM_TYPE = "model-snapshot";
 
+function createProviderReplaySessionState(
+  sessionManager: SessionManager,
+): ProviderReplaySessionState {
+  return {
+    getCustomEntries() {
+      try {
+        return sessionManager
+          .getEntries()
+          .flatMap((entry) =>
+            (entry as CustomEntryLike)?.type === "custom" &&
+            typeof (entry as CustomEntryLike).customType === "string"
+              ? [
+                  {
+                    customType: (entry as CustomEntryLike).customType,
+                    data: (entry as CustomEntryLike).data,
+                  },
+                ]
+              : [],
+          )
+          .filter((entry) => entry.customType.trim().length > 0);
+      } catch {
+        return [];
+      }
+    },
+    appendCustomEntry(customType: string, data: unknown) {
+      try {
+        sessionManager.appendCustomEntry(customType, data);
+      } catch {
+        // ignore persistence failures
+      }
+    },
+  };
+}
+
 function readLastModelSnapshot(sessionManager: SessionManager): ModelSnapshotEntry | null {
   try {
     const entries = sessionManager.getEntries();
@@ -716,6 +750,7 @@ export async function sanitizeSessionHistory(params: {
             sessionId: params.sessionId,
             messages: sanitizedOpenAI,
             allowedToolNames: params.allowedToolNames,
+            sessionState: createProviderReplaySessionState(params.sessionManager),
           },
         })
       : undefined;
@@ -734,20 +769,12 @@ export async function sanitizeSessionHistory(params: {
     return sanitizedWithProvider;
   }
 
-  // Google models use the full wrapper with logging and session markers.
-  if (isGoogleModelApi(params.modelApi)) {
-    return applyGoogleTurnOrderingFix({
-      messages: sanitizedWithProvider,
-      modelApi: params.modelApi,
-      sessionManager: params.sessionManager,
-      sessionId: params.sessionId,
-    }).messages;
-  }
-
   // Strict OpenAI-compatible providers (vLLM, Gemma, etc.) also reject
   // conversations that start with an assistant turn (e.g. delivery-mirror
-  // messages after /new).  Apply the same ordering fix without the
-  // Google-specific session markers.  See #38962.
+  // messages after /new). Provider hooks may already have applied a
+  // provider-owned ordering rewrite above; keep this generic fallback for the
+  // strict OpenAI-compatible path and for any provider that leaves assistant-
+  // first repair to core. See #38962.
   return sanitizeGoogleTurnOrdering(sanitizedWithProvider);
 }
 

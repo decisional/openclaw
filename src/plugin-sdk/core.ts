@@ -63,6 +63,8 @@ export type {
   ProviderReasoningOutputModeContext,
   ProviderReplayPolicy,
   ProviderReplayPolicyContext,
+  ProviderReplaySessionEntry,
+  ProviderReplaySessionState,
   ProviderResolveDynamicModelContext,
   ProviderResolvedUsageAuth,
   ProviderSanitizeReplayHistoryContext,

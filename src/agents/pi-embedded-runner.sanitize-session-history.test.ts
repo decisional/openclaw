@@ -37,8 +37,44 @@ vi.mock("../plugins/provider-runtime.js", () => ({
             dropThinkingBlockModelHints: ["claude"],
           }
         : undefined,
-  sanitizeProviderReplayHistoryWithPlugin: vi.fn(async ({ messages }) => messages),
-  resolveProviderReplayPolicyWithPlugin: vi.fn(() => undefined),
+  sanitizeProviderReplayHistoryWithPlugin: vi.fn(
+    async ({
+      provider,
+      context,
+    }: {
+      provider?: string;
+      context: {
+        messages: AgentMessage[];
+        sessionState?: {
+          appendCustomEntry(customType: string, data: unknown): void;
+        };
+      };
+    }) => {
+      if (
+        provider &&
+        provider.startsWith("google") &&
+        context.messages[0]?.role === "assistant" &&
+        context.sessionState
+      ) {
+        context.sessionState.appendCustomEntry("google-turn-ordering-bootstrap", {
+          timestamp: Date.now(),
+        });
+        return [
+          { role: "user", content: "(session bootstrap)" } as AgentMessage,
+          ...context.messages,
+        ];
+      }
+      return context.messages;
+    },
+  ),
+  resolveProviderReplayPolicyWithPlugin: vi.fn(
+    ({ provider, context }: { provider?: string; context?: { modelId?: string | null } }) =>
+      provider === "github-copilot" && String(context?.modelId ?? "").includes("claude")
+        ? {
+            dropThinkingBlocks: true,
+          }
+        : undefined,
+  ),
   validateProviderReplayTurnsWithPlugin: vi.fn(() => undefined),
 }));
 
@@ -224,6 +260,33 @@ describe("sanitizeSessionHistory", () => {
     });
 
     expect(result).toEqual(mockMessages);
+  });
+
+  it("lets Google provider hooks prepend a bootstrap turn and persist a marker", async () => {
+    vi.mocked(mockedHelpers.isGoogleModelApi).mockReturnValue(true);
+    const sessionEntries: Array<{ type: string; customType: string; data: unknown }> = [];
+    const sessionManager = makeInMemorySessionManager(sessionEntries);
+
+    const result = await sanitizeSessionHistory({
+      messages: castAgentMessages([
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "hello from previous turn" }],
+        },
+      ]),
+      modelApi: "google-generative-ai",
+      provider: "google-vertex",
+      sessionManager,
+      sessionId: TEST_SESSION_ID,
+    });
+
+    expect(result[0]).toMatchObject({
+      role: "user",
+      content: "(session bootstrap)",
+    });
+    expect(
+      sessionEntries.some((entry) => entry.customType === "google-turn-ordering-bootstrap"),
+    ).toBe(true);
   });
 
   it("passes simple user-only history through for Mistral models", async () => {
