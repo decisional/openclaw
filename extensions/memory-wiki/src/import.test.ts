@@ -132,6 +132,36 @@ alpha body with [[Beta Project|Beta]] and [Plan](projects/beta.md).
     ).rejects.toThrow("reserved but not implemented");
   });
 
+  it("auto-detects likely ChatGPT export files into the placeholder lane", async () => {
+    const { config } = await createVault({ initialize: true });
+    const sourceRoot = await createTempDir("memory-wiki-import-chatgpt-auto-");
+    const sourcePath = path.join(sourceRoot, "export.json");
+    await fs.writeFile(
+      sourcePath,
+      JSON.stringify([
+        {
+          title: "Alpha thread",
+          mapping: {
+            root: {
+              message: {
+                author: { role: "user" },
+                content: { parts: ["hello"] },
+              },
+            },
+          },
+        },
+      ]),
+      "utf8",
+    );
+
+    await expect(
+      importMemoryWikiInput({
+        config,
+        inputPath: sourcePath,
+      }),
+    ).rejects.toThrow("reserved but not implemented");
+  });
+
   it("writes duplicate and low-signal review sections for vault imports", async () => {
     const { rootDir, config } = await createVault({ initialize: true });
     const vaultPath = await createTempDir("memory-wiki-import-review-");

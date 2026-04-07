@@ -133,6 +133,8 @@ openclaw wiki obsidian daily
 
 `wiki import` is the recommended path for local files, folders, and markdown vaults like Obsidian or Logseq. It auto-detects the best import profile when possible, writes imported artifacts as source pages, and records progress in the shared task ledger for larger imports. Markdown vault imports also preserve readable note bodies plus imported tags, aliases, and link hints instead of flattening every note into a fenced blob, and compile/search now use that imported metadata to rank the right pages faster.
 
+Likely ChatGPT export JSON files now auto-detect into the reserved `chatgpt-export` lane instead of silently falling through as generic local-file imports, so the import path fails honestly until that profile lands.
+
 Imported aliases also work as lookup keys for `wiki_get` and metadata updates, so imported vault notes stay addressable by their original note names instead of only by generated file paths.
 
 Imported markdown vault relative paths also survive into lookup, retrieval, and `## Related` reconstruction, so `projects/alpha.md` keeps behaving like note identity instead of disappearing after import.

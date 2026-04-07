@@ -10,6 +10,7 @@ import {
 import { normalizeSingleOrTrimmedStringList } from "openclaw/plugin-sdk/text-runtime";
 import { compileMemoryWikiVault, type CompileMemoryWikiResult } from "./compile.js";
 import type { ResolvedMemoryWikiConfig } from "./config.js";
+import { detectChatGptExportFile } from "./import-profile-detect.js";
 import { buildImportReviewBody, type ImportReviewEntry } from "./import-review.js";
 import { appendMemoryWikiLog } from "./log.js";
 import {
@@ -346,6 +347,12 @@ async function resolveWikiImportProfile(params: {
     const ext = path.extname(params.inputPath).toLowerCase();
     if (!DIRECTORY_TEXT_EXTENSIONS.has(ext)) {
       throw new Error(`Import path is not a supported text source: ${params.inputPath}`);
+    }
+    if (await detectChatGptExportFile(params.inputPath)) {
+      return {
+        profileId: "chatgpt-export",
+        profileResolution: "automatic",
+      };
     }
     return {
       profileId: "local-file",
