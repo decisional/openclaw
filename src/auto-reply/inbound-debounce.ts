@@ -44,12 +44,16 @@ type DebounceBuffer<T> = {
 
 const DEFAULT_MAX_TRACKED_KEYS = 2048;
 
+export type InboundEnrichReason = "batched" | "queued";
+
 export type InboundDebounceCreateParams<T> = {
   debounceMs: number;
   maxTrackedKeys?: number;
   buildKey: (item: T) => string | null | undefined;
   shouldDebounce?: (item: T) => boolean;
   resolveDebounceMs?: (item: T) => number | undefined;
+  /** Called when the debouncer detects batching or queueing. Return the enriched item. */
+  onEnrich?: (item: T, reason: InboundEnrichReason) => T;
   onFlush: (items: T[]) => Promise<void>;
   onError?: (err: unknown, items: T[]) => void;
 };
@@ -69,11 +73,15 @@ export function createInboundDebouncer<T>(params: InboundDebounceCreateParams<T>
   };
 
   const runFlush = async (items: T[]) => {
+    const enrichedItems =
+      params.onEnrich && items.length > 1
+        ? items.map((item) => params.onEnrich!(item, "batched"))
+        : items;
     try {
-      await params.onFlush(items);
+      await params.onFlush(enrichedItems);
     } catch (err) {
       try {
-        params.onError?.(err, items);
+        params.onError?.(err, enrichedItems);
       } catch {
         // Flush failures are reported via onError, but this helper stays
         // non-throwing so keyed chains can continue processing later items.
@@ -170,6 +178,9 @@ export function createInboundDebouncer<T>(params: InboundDebounceCreateParams<T>
     if (!canDebounce || !key) {
       if (key) {
         if (buffers.has(key)) {
+          if (params.onEnrich && keyChains.has(key)) {
+            item = params.onEnrich(item, "queued");
+          }
           // Reserve the keyed immediate slot before forcing the pending buffer
           // to flush so fire-and-forget callers cannot be overtaken.
           const reservedTask = enqueueReservedKeyTask(key, async () => {
@@ -184,6 +195,9 @@ export function createInboundDebouncer<T>(params: InboundDebounceCreateParams<T>
           return;
         }
         if (keyChains.has(key)) {
+          if (params.onEnrich) {
+            item = params.onEnrich(item, "queued");
+          }
           await enqueueKeyTask(key, async () => {
             await runFlush([item]);
           });

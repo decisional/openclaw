@@ -1,3 +1,4 @@
+import type { ReplyToMode } from "openclaw/plugin-sdk/config-runtime";
 import { isSingleUseReplyToMode } from "openclaw/plugin-sdk/reply-reference";
 import { parseSlackTarget } from "./targets.js";
 
@@ -6,7 +7,7 @@ export function resolveSlackAutoThreadId(params: {
   toolContext?: {
     currentChannelId?: string;
     currentThreadTs?: string;
-    replyToMode?: "off" | "first" | "all" | "batched";
+    replyToMode?: ReplyToMode;
     hasRepliedRef?: { value: boolean };
   };
 }): string | undefined {
