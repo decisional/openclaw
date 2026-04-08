@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { KovaRunArtifact } from "./contracts/run-artifact.js";
+import { kovaRunArtifactSchema, type KovaRunArtifact } from "./contracts/run-artifact.js";
 import { readJsonFile, resolveKovaRunDir, resolveKovaRunsDir } from "./lib/fs.js";
 import { readKovaRunIndex } from "./lib/run-index.js";
 
@@ -27,21 +27,28 @@ export async function resolveLatestRunId(repoRoot: string) {
 }
 
 export async function readKovaArtifact(repoRoot: string, runId: string) {
-  return await readJsonFile<KovaRunArtifact>(
-    path.join(resolveKovaRunDir(repoRoot, runId), "run.json"),
+  return kovaRunArtifactSchema.parse(
+    await readJsonFile<KovaRunArtifact>(path.join(resolveKovaRunDir(repoRoot, runId), "run.json")),
   );
 }
 
 export function renderArtifactSummary(artifact: KovaRunArtifact) {
+  const backendLabel = artifact.backend.id ?? artifact.backend.kind;
+  const backendTitle = artifact.backend.title ? ` - ${artifact.backend.title}` : "";
   const lines = [
     `Run: ${artifact.runId}`,
     `Target: ${artifact.selection.target}`,
-    `Backend: ${artifact.backend.kind}${artifact.backend.mode ? ` (${artifact.backend.mode})` : ""}`,
+    `Backend: ${backendLabel}${backendTitle}${artifact.backend.mode ? ` (${artifact.backend.mode})` : ""}`,
     `Verdict: ${artifact.verdict}`,
     `Classification: ${artifact.classification.domain} - ${artifact.classification.reason}`,
     `Counts: ${artifact.counts.passed}/${artifact.counts.total} passed, ${artifact.counts.failed} failed`,
     `Duration: ${artifact.timing.durationMs}ms`,
   ];
+  if (artifact.coverage.scenarioIds.length > 0) {
+    lines.push(
+      `Coverage: ${artifact.coverage.scenarioIds.length} scenario(s), ${artifact.coverage.surfaces.length} surface(s), ${artifact.coverage.capabilities.length} capability id(s)`,
+    );
+  }
   if (artifact.selection.scenarioIds?.length) {
     lines.push(`Selected Scenarios: ${artifact.selection.scenarioIds.join(", ")}`);
   }

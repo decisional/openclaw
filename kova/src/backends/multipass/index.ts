@@ -1,5 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  buildKovaCoverageFromQaCatalog,
+  buildKovaCoverageFromScenarioResults,
+} from "../../catalog/qa.js";
 import type { KovaRunArtifact } from "../../contracts/run-artifact.js";
 import { kovaRunArtifactSchema } from "../../contracts/run-artifact.js";
 import { ensureDir, resolveKovaRunDir, writeJsonFile, writeTextFile } from "../../lib/fs.js";
@@ -34,6 +38,7 @@ function createMultipassBaseArtifact(params: {
     selection: {
       command: "run",
       target: params.selection.target,
+      suite: "qa-suite",
       scenarioIds:
         params.selection.scenarioIds && params.selection.scenarioIds.length > 0
           ? params.selection.scenarioIds
@@ -46,8 +51,12 @@ function createMultipassBaseArtifact(params: {
       capabilities: ["behavior", "qa"],
     },
     backend: {
+      id: "multipass",
+      title: "Multipass VM",
       kind: "multipass",
+      runner: "vm",
       mode: params.providerMode,
+      binary: "multipass",
     },
     environment: {
       os: process.platform,
@@ -56,6 +65,7 @@ function createMultipassBaseArtifact(params: {
       gitCommit: params.gitCommit,
       gitDirty: params.gitDirty,
     },
+    coverage: buildKovaCoverageFromQaCatalog(params.selection.scenarioIds),
   };
 }
 
@@ -118,6 +128,7 @@ export const multipassBackend: KovaBackend = {
           passed: 0,
           failed: 0,
         },
+        coverage: baseArtifact.coverage,
         scenarioResults: [],
         evidence: {
           sourceArtifactPaths: evidencePaths,
@@ -175,6 +186,10 @@ export const multipassBackend: KovaBackend = {
         throw new Error(`expected QA report at ${reportPath} after Multipass run`);
       }
 
+      const scenarioResults = buildQaScenarioResultsFromSummary({
+        selectedScenarioIds: selection.scenarioIds,
+        summary,
+      });
       const finishedAt = new Date();
       const artifact = kovaRunArtifactSchema.parse({
         ...baseArtifact,
@@ -187,10 +202,8 @@ export const multipassBackend: KovaBackend = {
           durationMs: finishedAt.getTime() - startedAt.getTime(),
         },
         counts: summary.counts,
-        scenarioResults: buildQaScenarioResultsFromSummary({
-          selectedScenarioIds: selection.scenarioIds,
-          summary,
-        }),
+        coverage: buildKovaCoverageFromScenarioResults(scenarioResults),
+        scenarioResults,
         evidence: {
           reportPath,
           summaryPath,
@@ -233,6 +246,7 @@ export const multipassBackend: KovaBackend = {
           passed: 0,
           failed: 0,
         },
+        coverage: baseArtifact.coverage,
         scenarioResults: [],
         evidence: {
           sourceArtifactPaths: evidencePaths,

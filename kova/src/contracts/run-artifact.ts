@@ -21,6 +21,7 @@ export const kovaScenarioResultSchema = z.object({
   id: z.string().trim().min(1),
   title: z.string().trim().min(1),
   verdict: kovaVerdictSchema,
+  capabilities: z.array(z.string().trim().min(1)).default([]),
   surface: z.string().trim().min(1).optional(),
   sourcePath: z.string().trim().min(1).optional(),
   details: z.string().trim().min(1).optional(),
@@ -47,8 +48,12 @@ export const kovaRunArtifactSchema = z.object({
     capabilities: z.array(z.string().trim().min(1)).default([]),
   }),
   backend: z.object({
+    id: z.string().trim().min(1).optional(),
+    title: z.string().trim().min(1).optional(),
     kind: z.string().trim().min(1),
+    runner: z.enum(["host", "vm", "docker", "live"]).optional(),
     mode: z.string().trim().min(1).optional(),
+    binary: z.string().trim().min(1).optional(),
   }),
   environment: z.object({
     os: z.string().trim().min(1),
@@ -73,6 +78,17 @@ export const kovaRunArtifactSchema = z.object({
     passed: z.number().int().nonnegative(),
     failed: z.number().int().nonnegative(),
   }),
+  coverage: z
+    .object({
+      scenarioIds: z.array(z.string().trim().min(1)).default([]),
+      capabilities: z.array(z.string().trim().min(1)).default([]),
+      surfaces: z.array(z.string().trim().min(1)).default([]),
+    })
+    .default({
+      scenarioIds: [],
+      capabilities: [],
+      surfaces: [],
+    }),
   scenarioResults: z.array(kovaScenarioResultSchema).default([]),
   evidence: z.object({
     reportPath: z.string().trim().min(1).optional(),

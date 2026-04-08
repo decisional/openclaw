@@ -1,6 +1,6 @@
 import path from "node:path";
 import { z } from "zod";
-import { readQaBootstrapScenarioCatalog } from "../../../../extensions/qa-lab/api.js";
+import { buildKovaQaCapabilities, selectKovaQaScenarios } from "../../catalog/qa.js";
 import type { KovaScenarioResult } from "../../contracts/run-artifact.js";
 import { readJsonFile } from "../../lib/fs.js";
 
@@ -48,11 +48,7 @@ export function buildQaScenarioResultsFromSummary(params: {
   selectedScenarioIds?: string[];
   summary: KovaQaSummary;
 }) {
-  const catalog = readQaBootstrapScenarioCatalog();
-  const selectedScenarios =
-    params.selectedScenarioIds && params.selectedScenarioIds.length > 0
-      ? catalog.scenarios.filter((scenario) => params.selectedScenarioIds?.includes(scenario.id))
-      : catalog.scenarios;
+  const selectedScenarios = selectKovaQaScenarios(params.selectedScenarioIds);
 
   return params.summary.scenarios.map((scenario, index) => {
     const catalogScenario = selectedScenarios[index];
@@ -62,6 +58,7 @@ export function buildQaScenarioResultsFromSummary(params: {
       id: catalogScenario?.id ?? scenario.name,
       title: catalogScenario?.title ?? scenario.name,
       verdict: scenario.status,
+      capabilities: buildKovaQaCapabilities(catalogScenario?.surface),
       surface: catalogScenario?.surface,
       sourcePath: catalogScenario?.sourcePath,
       details: scenario.details,

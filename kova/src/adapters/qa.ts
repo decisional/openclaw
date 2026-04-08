@@ -1,6 +1,11 @@
 import path from "node:path";
 import { readQaBootstrapScenarioCatalog, runQaSuite } from "../../../extensions/qa-lab/api.js";
 import {
+  buildKovaCoverageFromQaCatalog,
+  buildKovaCoverageFromScenarioResults,
+  buildKovaQaCapabilities,
+} from "../catalog/qa.js";
+import {
   kovaRunArtifactSchema,
   type KovaRunArtifact,
   type KovaScenarioResult,
@@ -54,6 +59,7 @@ function buildQaScenarioResults(params: {
       id: catalogScenario?.id ?? scenario.name,
       title: catalogScenario?.title ?? scenario.name,
       verdict: scenario.status,
+      capabilities: buildKovaQaCapabilities(catalogScenario?.surface),
       surface: catalogScenario?.surface,
       sourcePath: catalogScenario?.sourcePath,
       details: scenario.details,
@@ -87,7 +93,10 @@ export async function runQaAdapter(opts: KovaQaRunOptions) {
       capabilities: ["behavior", "qa"],
     },
     backend: {
+      id: "host",
+      title: "Host runtime",
       kind: "host",
+      runner: "host",
       mode: opts.providerMode ?? "mock-openai",
     },
     environment: {
@@ -97,6 +106,7 @@ export async function runQaAdapter(opts: KovaQaRunOptions) {
       gitCommit: await resolveGitCommit(opts.repoRoot),
       gitDirty: await resolveGitDirty(opts.repoRoot),
     },
+    coverage: buildKovaCoverageFromQaCatalog(opts.scenarioIds),
   };
 
   try {
@@ -128,6 +138,7 @@ export async function runQaAdapter(opts: KovaQaRunOptions) {
         durationMs: finishedAt.getTime() - startedAt.getTime(),
       },
       counts,
+      coverage: buildKovaCoverageFromScenarioResults(scenarioResults),
       scenarioResults,
       evidence: {
         reportPath: qaResult.reportPath,
@@ -164,6 +175,7 @@ export async function runQaAdapter(opts: KovaQaRunOptions) {
         passed: 0,
         failed: 0,
       },
+      coverage: baseArtifact.coverage,
       scenarioResults: [],
       evidence: {
         sourceArtifactPaths: [qaOutputDir],

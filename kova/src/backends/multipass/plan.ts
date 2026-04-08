@@ -2,7 +2,7 @@ import path from "node:path";
 import type { KovaBackendRunSelection } from "../types.js";
 
 export type KovaMultipassPlan = {
-  version: 2;
+  version: 1;
   runId: string;
   vmName: string;
   image: string;
@@ -96,7 +96,7 @@ export function buildMultipassPlan(
   const guestScriptPath = `/tmp/${vmName}-qa-suite.sh`;
   const qaCommand = buildQaCommand(selection, guestArtifactsPath);
   return {
-    version: 2,
+    version: 1,
     runId: selection.runId,
     vmName,
     image: MULTIPASS_IMAGE,
