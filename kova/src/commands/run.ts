@@ -1,5 +1,6 @@
 import { resolveKovaBackend } from "../backends/registry.js";
 import type { KovaBackendId, KovaRunTarget } from "../backends/types.js";
+import type { KovaRunArtifact, KovaVerdict } from "../contracts/run-artifact.js";
 import { createKovaRunId } from "../lib/run-id.js";
 import { renderArtifactSummary } from "../report.js";
 
@@ -44,6 +45,18 @@ function parseRunOptions(args: string[]) {
   return options;
 }
 
+function resolveRunExitCode(artifact: KovaRunArtifact) {
+  const exitCodes: Record<KovaVerdict, number> = {
+    pass: 0,
+    skipped: 0,
+    degraded: 2,
+    fail: 3,
+    flaky: 4,
+    blocked: 5,
+  };
+  return exitCodes[artifact.verdict];
+}
+
 export async function runCommand(repoRoot: string, args: string[]) {
   const options = parseRunOptions(args);
   if (options.target !== "qa") {
@@ -60,4 +73,5 @@ export async function runCommand(repoRoot: string, args: string[]) {
     scenarioIds: options.scenarioIds.length > 0 ? options.scenarioIds : undefined,
   });
   process.stdout.write(renderArtifactSummary(artifact));
+  process.exitCode = resolveRunExitCode(artifact);
 }

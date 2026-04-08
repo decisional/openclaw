@@ -81,3 +81,4 @@ export const kovaRunArtifactSchema = z.object({
 
 export type KovaRunArtifact = z.infer<typeof kovaRunArtifactSchema>;
 export type KovaScenarioResult = z.infer<typeof kovaScenarioResultSchema>;
+export type KovaVerdict = z.infer<typeof kovaVerdictSchema>;

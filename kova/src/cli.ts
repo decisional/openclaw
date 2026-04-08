@@ -12,6 +12,13 @@ function printHelp() {
       "  kova run qa [--backend host|multipass] [--provider-mode mock-openai|live-frontier] [--scenario <id>]",
       "  kova report [latest|<run-id>]",
       "",
+      "Run exit codes:",
+      "  0 = pass or skipped",
+      "  2 = degraded",
+      "  3 = fail",
+      "  4 = flaky",
+      "  5 = blocked",
+      "",
     ].join("\n"),
   );
   process.stdout.write("\n");
