@@ -11,7 +11,7 @@ function printHelp() {
       "",
       "Usage:",
       "  kova list [inventory|targets|backends [qa]|scenarios [qa]|surfaces [qa]] [--json]",
-      "  kova run qa [--backend host|multipass] [--provider-mode mock-openai|live-frontier] [--scenario <id>]",
+      "  kova run qa [--backend host|multipass] [--provider-mode mock-openai|live-frontier] [--scenario <id>] [--json]",
       "  kova report [latest|<run-id>] [--json]",
       "",
       "Run exit codes:",

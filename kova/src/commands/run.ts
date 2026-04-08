@@ -11,11 +11,19 @@ function parseRunOptions(args: string[]) {
     backend?: KovaBackendId;
     providerMode?: "mock-openai" | "live-frontier";
     scenarioIds: string[];
+    json: boolean;
   } = {
     scenarioIds: [],
+    json: false,
   };
 
-  const rest = [...args];
+  const rest = args.filter((arg) => {
+    if (arg === "--json") {
+      options.json = true;
+      return false;
+    }
+    return true;
+  });
   const rawTarget = rest.shift();
   if (rawTarget === "qa") {
     options.target = rawTarget;
@@ -79,6 +87,10 @@ export async function runCommand(repoRoot: string, args: string[]) {
     providerMode: options.providerMode,
     scenarioIds: options.scenarioIds.length > 0 ? options.scenarioIds : undefined,
   });
-  process.stdout.write(renderArtifactSummary(artifact));
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(artifact, null, 2)}\n`);
+  } else {
+    process.stdout.write(renderArtifactSummary(artifact));
+  }
   process.exitCode = resolveRunExitCode(artifact);
 }
