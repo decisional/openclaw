@@ -1,0 +1,49 @@
+{
+  gateway: {
+    mode: "local",
+    bind: "lan",
+    port: 18789,
+    auth: {
+      mode: "token",
+    },
+    http: {
+      endpoints: {
+        chatCompletions: { enabled: true },
+      },
+    },
+  },
+
+  tools: {
+    profile: "coding",
+    alsoAllow: ["group:messaging", "agents_list"],
+
+    // Allow session tools to see sessions for this agent (needed for follow-up routing).
+    sessions: {
+      visibility: "agent",
+    },
+
+    web: {
+      search: {
+        enabled: true,
+        provider: "duckduckgo",
+      },
+    },
+
+    elevated: {
+      enabled: true,
+      allowFrom: {
+        webchat: ["*"],
+      },
+    },
+
+    exec: {
+      host: "gateway",
+      security: "full",
+      ask: "off",
+    },
+  },
+
+  session: {
+    dmScope: "per-channel-peer",
+  },
+}
