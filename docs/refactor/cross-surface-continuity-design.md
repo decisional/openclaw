@@ -4,10 +4,11 @@
 
 OpenClaw continuity is session-key based. That works within a surface, but a workflow that starts on one surface and continues on another often lands in a different session key and loses operational context.
 
-This is visible today in gateway behavior:
+This is visible today in ingress behavior:
 
 - Chat/Responses APIs are stateless by default per request unless `user` or `x-openclaw-session-key` is provided.
-- Slack routing creates channel/thread-scoped session keys, with optional parent-thread fork behavior.
+- Slack routing uses the shared route/session pipeline and creates channel/thread-scoped session keys, with optional parent-thread fork behavior.
+- `x-openclaw-work-context` is an API ingress concept; Slack needs a binding path (pre-seed or tool-driven) to map a work context onto a session.
 - Memory and session-history tools can recover context, but recovery is agent-driven, not deterministic ingress routing.
 
 ## Review Of Proposed `workContextId + assemble()` Fan-Out
@@ -57,6 +58,14 @@ If `x-openclaw-work-context` is present but unknown:
 
 This keeps cross-surface continuity deterministic without scanning multiple sessions per turn.
 
+### Important Nuance: Shared Routing vs Header Ingress
+
+- Slack and gateway both rely on shared route/session primitives (`resolveAgentRoute()` and session-key builders).
+- The gateway is still where HTTP headers are parsed.
+- Therefore, cross-surface continuity needs two pieces:
+  1. Header-driven work-context resolution for API ingress.
+  2. A way for Slack turns to reuse that mapping (for example, pre-seeding or a `set_work_context` style bind that yields an explicit session key).
+
 ### V1 Scope Boundaries
 
 Keep unchanged:
@@ -79,10 +88,15 @@ Minimal v1 implementation:
 - `src/gateway/http-utils.ts`
   - parse `x-openclaw-work-context`
   - resolve `workContextId -> canonicalSessionKey` before fallback logic
+  - allow binding `workContextId -> explicit session key` when both headers are present
 - `src/gateway/openai-http.ts`
   - include resolved/echoed work-context metadata in response headers (if provided)
 - `src/gateway/openresponses-http.ts`
   - same as OpenAI gateway path
+- `src/config/sessions/session-key.ts`
+  - keep explicit `ctx.SessionKey` precedence and route work-context-resolved keys through the same normalization path
+- `extensions/slack/src/monitor/message-handler/prepare.ts`
+  - keep shared route resolution; optionally hydrate explicit session key from a persisted work-context binding when available
 - `src/config/sessions/types.ts`
   - optional metadata on `SessionEntry` for observability (`workContextId`), not required for routing correctness
 - `src/gateway/protocol/schema/sessions.ts`
@@ -130,4 +144,4 @@ Minimal v1 implementation:
 2. Existing clients without the header see no behavior change.
 3. `x-openclaw-session-key` still takes precedence over work-context routing.
 4. No new `assemble()`-time sibling-session scanning is introduced.
-5. End-to-end tests show continuity across OpenAI/OpenResponses + Slack handoff when the same work context is used.
+5. End-to-end tests show continuity across OpenAI/OpenResponses + Slack handoff when the same work context mapping is bound.
