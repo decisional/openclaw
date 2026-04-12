@@ -1,4 +1,4 @@
-# Cross-Surface Continuity Design Review
+# Cross-Surface Continuity Design
 
 ## Problem
 
@@ -10,26 +10,6 @@ This is visible today in ingress behavior:
 - Slack routing uses the shared route/session pipeline and creates channel/thread-scoped session keys, with optional parent-thread fork behavior.
 - `x-openclaw-work-context` is an API ingress concept; Slack needs a binding path (pre-seed or tool-driven) to map a work context onto a session.
 - Memory and session-history tools can recover context, but recovery is agent-driven, not deterministic ingress routing.
-
-## Review Of Proposed `workContextId + assemble()` Fan-Out
-
-The proposed direction identifies the right missing concept (`workContextId`) but puts too much logic in the wrong layer.
-
-What is good:
-
-- Adds a logical cross-surface key.
-- Uses explicit transport metadata instead of fuzzy inference.
-- Aims to support receptionist/fixer/HITL workflows.
-
-What should change:
-
-1. `assemble()` should not scan sibling sessions every turn.
-2. Cross-session transcript fan-out in `assemble()` increases latency and token use on the hottest path.
-3. Fan-out creates non-deterministic ordering/merge behavior under concurrency.
-4. Extending `session-memory` for “surface switch” events is a lifecycle mismatch; the hook is command-oriented (`/new`, `/reset`) today.
-5. Making retrieval the primary continuity mechanism is fragile compared to deterministic routing.
-
-Bottom line: keep `workContextId`, but do not make prompt-time cross-session retrieval the correctness path.
 
 ## Recommended Architecture (Best First Implementation)
 
