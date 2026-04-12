@@ -5,6 +5,8 @@ This bundle codifies the OpenClaw policy required for Slack receptionist workflo
 - keeps `coding` tool profile
 - explicitly enables messaging tools via `tools.alsoAllow: ["group:messaging", "agents_list"]`
 - keeps session tools usable across this agent via `tools.sessions.visibility: "agent"`
+- forces Slack channel/group replies into threads (`channels.slack.replyToMode: "all"`)
+- enables thread context handoff from channel root (`channels.slack.thread.inheritParent: true`)
 
 ## Files
 

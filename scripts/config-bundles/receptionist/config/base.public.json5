@@ -46,4 +46,16 @@
   session: {
     dmScope: "per-channel-peer",
   },
+
+  channels: {
+    slack: {
+      // Keep Slack channel chatter contained in threads.
+      // Channel/group top-level invokes open a thread and follow-ups stay there.
+      replyToMode: "all",
+      thread: {
+        historyScope: "thread",
+        inheritParent: true,
+      },
+    },
+  },
 }
