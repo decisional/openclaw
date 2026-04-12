@@ -1,4 +1,10 @@
 {
+  agents: {
+    defaults: {
+      thinkingDefault: "high",
+    },
+  },
+
   gateway: {
     mode: "local",
     bind: "lan",
