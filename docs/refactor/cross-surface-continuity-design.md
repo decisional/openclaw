@@ -4,12 +4,42 @@
 
 OpenClaw continuity is session-key based. That works within a surface, but a workflow that starts on one surface and continues on another often lands in a different session key and loses operational context.
 
+### Product scenarios this must support
+
+- OpenClaw as **receptionist**:
+  a user starts in Slack, OpenClaw investigates via API/tools, and then replies back in the same Slack conversation.
+- OpenClaw as **fixer**:
+  a platform-initiated failure run asks OpenClaw to investigate, talk to users if needed, and continue execution.
+- OpenClaw as **HITL approval gateway**:
+  OpenClaw coordinates human approvals in Slack, then resumes/updates workflow execution.
+
+### Concrete failure pattern
+
+- Turn 1 (API): OpenClaw gets instructions and context in an API session key.
+- Turn 2 (Slack): user replies in Slack thread, but Slack lands on a different session key.
+- Result: OpenClaw behaves as if turn 1 never happened.
+
 This is visible today in ingress behavior:
 
 - Chat/Responses APIs are stateless by default per request unless `user` or `x-openclaw-session-key` is provided.
 - Slack routing uses the shared route/session pipeline and creates channel/thread-scoped session keys, with optional parent-thread fork behavior.
 - `x-openclaw-work-context` is an API ingress concept; Slack needs a binding path (pre-seed or tool-driven) to map a work context onto a session.
 - Memory and session-history tools can recover context, but recovery is agent-driven, not deterministic ingress routing.
+
+## Reviewer Quick Start
+
+If you are reviewing this design (human or AI), use this checklist:
+
+1. Verify the routing objective:
+   one logical task should resolve to one canonical session key across API and Slack turns.
+2. Verify precedence:
+   explicit `x-openclaw-session-key` must still win over any work-context mapping.
+3. Verify Slack compatibility:
+   Slack uses shared route/session primitives, but header parsing remains gateway-specific.
+4. Verify constraints:
+   this design should not require prompt-time sibling-session fan-out in `assemble()`.
+5. Verify rollout risk:
+   behavior must be unchanged for clients that do not send `x-openclaw-work-context`.
 
 ## Recommended Architecture (Best First Implementation)
 
