@@ -34,11 +34,15 @@ If you are reviewing this design (human or AI), use this checklist:
    one logical task should resolve to one canonical session key across API and Slack turns.
 2. Verify precedence:
    explicit `x-openclaw-session-key` must still win over any work-context mapping.
-3. Verify Slack compatibility:
-   Slack uses shared route/session primitives, but header parsing remains gateway-specific.
-4. Verify constraints:
+3. Verify isolation:
+   work-context routing is scoped by trusted principal identity and agent (not agent-only global).
+4. Verify Slack compatibility:
+   API -> Slack handoff requires persisted conversation binding, not work-context lookup alone.
+5. Verify ingress coverage:
+   fixer/hook ingress is included in V1, not deferred.
+6. Verify constraints:
    this design should not require prompt-time sibling-session fan-out in `assemble()`.
-5. Verify rollout risk:
+7. Verify rollout risk:
    behavior must be unchanged for clients that do not send `x-openclaw-work-context`.
 
 ## Recommended Architecture (Best First Implementation)
@@ -47,11 +51,20 @@ If you are reviewing this design (human or AI), use this checklist:
 
 Continuity should be solved at **ingress routing time**, not prompt assembly time.
 
-### V1: Canonical Session Routing Via Work-Context Registry
+### V1: Scoped Work-Context Routing
 
-Introduce a small agent-scoped registry that maps:
+Introduce a routing map keyed by trusted scope:
 
-- `workContextId -> canonicalSessionKey`
+- `(scopeKey, workContextId) -> canonicalSessionKey`
+
+Where:
+
+- `scopeKey` is derived from trusted ingress identity + agent (for example auth subject + agentId).
+- `workContextId` is caller-provided logical task id.
+
+This prevents unrelated callers from converging on the same transcript by guessing/reusing a work context id.
+
+For non-trusted/shared ingress, `x-openclaw-work-context` must be ignored or rejected unless a trusted scope can be established.
 
 Then resolve session keys in this precedence order:
 
@@ -68,13 +81,22 @@ If `x-openclaw-work-context` is present but unknown:
 
 This keeps cross-surface continuity deterministic without scanning multiple sessions per turn.
 
+### V1 Ingress Surfaces
+
+V1 must apply the same resolution semantics to all ingress paths used by the target scenarios:
+
+- `/v1/chat/completions`
+- `/v1/responses`
+- `/hooks/agent` (direct request and mapping-based dispatch paths)
+
 ### Important Nuance: Shared Routing vs Header Ingress
 
 - Slack and gateway both rely on shared route/session primitives (`resolveAgentRoute()` and session-key builders).
 - The gateway is still where HTTP headers are parsed.
-- Therefore, cross-surface continuity needs two pieces:
+- Therefore, cross-surface continuity needs three pieces:
   1. Header-driven work-context resolution for API ingress.
-  2. A way for Slack turns to reuse that mapping (for example, pre-seeding or a `set_work_context` style bind that yields an explicit session key).
+  2. Hook-ingress work-context resolution for platform-initiated fixer/HITL flows.
+  3. A persisted conversation binding write path for API -> Slack handoff so Slack inbound can resolve to the same target session deterministically.
 
 ### V1 Scope Boundaries
 
@@ -97,25 +119,30 @@ Minimal v1 implementation:
 
 - `src/gateway/http-utils.ts`
   - parse `x-openclaw-work-context`
-  - resolve `workContextId -> canonicalSessionKey` before fallback logic
+  - resolve `(scopeKey, workContextId) -> canonicalSessionKey` before fallback logic
   - allow binding `workContextId -> explicit session key` when both headers are present
 - `src/gateway/openai-http.ts`
   - include resolved/echoed work-context metadata in response headers (if provided)
 - `src/gateway/openresponses-http.ts`
   - same as OpenAI gateway path
+- `src/gateway/server-http.ts`
+  - apply the same scoped work-context/session resolution for `/hooks/agent` request path
+- `src/gateway/hooks.ts`
+  - extend mapping payload normalization to carry optional work-context and route via the same resolver
 - `src/config/sessions/session-key.ts`
   - keep explicit `ctx.SessionKey` precedence and route work-context-resolved keys through the same normalization path
 - `extensions/slack/src/monitor/message-handler/prepare.ts`
-  - keep shared route resolution; optionally hydrate explicit session key from a persisted work-context binding when available
+  - keep shared route resolution; consume persisted conversation binding that points Slack conversation to the canonical session key
 - `src/config/sessions/types.ts`
   - optional metadata on `SessionEntry` for observability (`workContextId`), not required for routing correctness
-- `src/gateway/protocol/schema/sessions.ts`
-  - optional patch/create fields only if we expose admin/session APIs for binding
-- `src/sessions/work-context-store.ts` (new)
-  - small persisted map with atomic write helper
-  - agent-scoped location near session store
-- `src/sessions/work-context-store.test.ts` (new)
-  - load/save/overwrite/invalid-input tests
+- `src/infra/outbound/session-binding-service.ts`
+  - add scoped work-context binding support and explicit bind-to-session operation
+- `src/infra/outbound/current-conversation-bindings.ts`
+  - persist API -> Slack conversation bindings used for deterministic reroute
+- `src/infra/outbound/session-binding-service.test.ts`
+  - add scope isolation and precedence tests
+- `src/infra/outbound/current-conversation-bindings.test.ts`
+  - add API -> Slack handoff binding tests
 - gateway request-context tests
   - precedence and backward compatibility tests
 
@@ -123,9 +150,10 @@ Minimal v1 implementation:
 
 1. Deterministic: one work context maps to one canonical session key.
 2. Cheap: no per-turn fan-out across sibling sessions.
-3. Compatible: existing session key and `user` flows still work.
-4. Safe rollout: additive header + resolver, no context-engine interface churn.
-5. Correct ownership: routing layer owns identity; context layer owns prompt assembly.
+3. Isolated: scope key prevents cross-principal session convergence.
+4. Compatible: existing session key and `user` flows still work.
+5. Safe rollout: additive resolver, no context-engine interface churn.
+6. Correct ownership: routing layer owns identity; context layer owns prompt assembly.
 
 ## Rollout Plan
 
@@ -135,7 +163,9 @@ Minimal v1 implementation:
 
 ### Phase 1 (small code PR)
 
-- Add `x-openclaw-work-context` parsing + resolver + tests.
+- Add scoped `x-openclaw-work-context` parsing + resolver + tests.
+- Add equivalent resolver path for `/hooks/agent`.
+- Add conversation-binding writes for API -> Slack handoff.
 - Keep all existing behavior unchanged when header is absent.
 
 ### Phase 2 (operator ergonomics)
@@ -151,7 +181,8 @@ Minimal v1 implementation:
 ## Acceptance Criteria
 
 1. Two requests on different surfaces with the same `x-openclaw-work-context` land on the same session key.
-2. Existing clients without the header see no behavior change.
-3. `x-openclaw-session-key` still takes precedence over work-context routing.
-4. No new `assemble()`-time sibling-session scanning is introduced.
-5. End-to-end tests show continuity across OpenAI/OpenResponses + Slack handoff when the same work context mapping is bound.
+2. Calls from different trusted scopes do not converge on the same session key for the same `workContextId`.
+3. Existing clients without the header see no behavior change.
+4. `x-openclaw-session-key` still takes precedence over work-context routing.
+5. No new `assemble()`-time sibling-session scanning is introduced.
+6. End-to-end tests show continuity across OpenAI/OpenResponses/hooks + Slack handoff when the same scoped work context mapping is bound.
