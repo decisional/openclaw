@@ -904,7 +904,7 @@ export async function handleOpenResponsesHttpRequest(
 
     rememberResponseSession();
     setCompatContinuityHeaders(res, { sessionKey, workContextId });
-    rememberResponseSession();
+    writeSseEvent(res, { type: "response.completed", response: finalResponse });
     writeDone(res);
     res.end();
   };
