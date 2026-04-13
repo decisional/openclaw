@@ -50,6 +50,7 @@ import {
   type OpenClawConfig,
 } from "./channel-api.js";
 import { resolveSlackChannelType } from "./channel-type.js";
+import { resolveSlackConversationBindingRef } from "./conversation-bindings.js";
 import { shouldSuppressLocalSlackExecApprovalPrompt } from "./exec-approvals.js";
 import { resolveSlackGroupRequireMention, resolveSlackGroupToolPolicy } from "./group-policy.js";
 import {
@@ -314,6 +315,14 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount, SlackProbe> = crea
       setupWizard: slackSetupWizard,
       setup: slackSetupAdapter,
     }),
+    conversationBindings: {
+      resolveConversationRef: ({ conversationId, parentConversationId, threadId }) =>
+        resolveSlackConversationBindingRef({
+          conversationId,
+          parentConversationId,
+          threadId,
+        }),
+    },
     allowlist: {
       ...buildLegacyDmAccountAllowlistAdapter({
         channelId: "slack",
@@ -444,14 +453,13 @@ export const slackPlugin: ChannelPlugin<ResolvedSlackAccount, SlackProbe> = crea
         return await (await loadSlackProbeModule()).probeSlack(token, timeoutMs);
       },
       formatCapabilitiesProbe: ({ probe }) => {
-        const slackProbe = probe as SlackProbe | undefined;
         const lines = [];
-        if (slackProbe?.bot?.name) {
-          lines.push({ text: `Bot: @${slackProbe.bot.name}` });
+        if (probe?.bot?.name) {
+          lines.push({ text: `Bot: @${probe.bot.name}` });
         }
-        if (slackProbe?.team?.name || slackProbe?.team?.id) {
-          const id = slackProbe.team?.id ? ` (${slackProbe.team.id})` : "";
-          lines.push({ text: `Team: ${slackProbe.team?.name ?? "unknown"}${id}` });
+        if (probe?.team?.name || probe?.team?.id) {
+          const id = probe.team?.id ? ` (${probe.team.id})` : "";
+          lines.push({ text: `Team: ${probe.team?.name ?? "unknown"}${id}` });
         }
         return lines;
       },

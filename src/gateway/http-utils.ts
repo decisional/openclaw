@@ -23,6 +23,11 @@ import {
 import { sendGatewayAuthFailure } from "./http-common.js";
 import { ADMIN_SCOPE, CLI_DEFAULT_OPERATOR_SCOPES } from "./method-scopes.js";
 import { loadGatewayModelCatalog } from "./server-model-catalog.js";
+import {
+  bindWorkContextToSession,
+  buildCanonicalWorkContextSessionKey,
+  resolveWorkContextBinding,
+} from "./work-context-bindings.js";
 
 export const OPENCLAW_MODEL_ID = "openclaw";
 export const OPENCLAW_DEFAULT_MODEL_ID = "openclaw/default";
@@ -297,6 +302,119 @@ export function resolveSessionKey(params: {
   return buildAgentMainSessionKey({ agentId: params.agentId, mainKey });
 }
 
+function resolveWorkContextId(req: IncomingMessage): string | undefined {
+  return normalizeOptionalString(getHeader(req, "x-openclaw-work-context"));
+}
+
+function resolveCompatWorkContextScopeKey(params: {
+  req: IncomingMessage;
+  auth: ResolvedGatewayAuth;
+  requestAuth: AuthorizedGatewayHttpRequest;
+  agentId: string;
+}): string | null {
+  const { authMethod } = params.requestAuth;
+  if (authMethod === "token" || authMethod === "password") {
+    return `compat:${authMethod}:agent:${params.agentId}`;
+  }
+  if (authMethod === "trusted-proxy" && params.auth.mode === "trusted-proxy") {
+    const userHeader = params.auth.trustedProxy?.userHeader;
+    const user = userHeader
+      ? normalizeOptionalString(getHeader(params.req, userHeader))
+      : undefined;
+    return `trusted-proxy:${user ?? "anonymous"}:agent:${params.agentId}`;
+  }
+  return null;
+}
+
+type GatewaySessionKeyResolution =
+  | {
+      ok: true;
+      sessionKey: string;
+      workContextId?: string;
+    }
+  | {
+      ok: false;
+      errorMessage: string;
+    };
+
+function resolveGatewayCompatSessionKey(params: {
+  req: IncomingMessage;
+  auth?: ResolvedGatewayAuth;
+  requestAuth?: AuthorizedGatewayHttpRequest;
+  agentId: string;
+  user?: string;
+  prefix: string;
+}): GatewaySessionKeyResolution {
+  const explicit = getHeader(params.req, "x-openclaw-session-key")?.trim();
+  const workContextId = resolveWorkContextId(params.req);
+  if (!workContextId) {
+    return {
+      ok: true,
+      sessionKey:
+        explicit ??
+        resolveSessionKey({
+          req: params.req,
+          agentId: params.agentId,
+          user: params.user,
+          prefix: params.prefix,
+        }),
+    };
+  }
+  if (!params.auth || !params.requestAuth) {
+    return {
+      ok: false,
+      errorMessage: "x-openclaw-work-context requires a trusted compat gateway auth surface.",
+    };
+  }
+  const scopeKey = resolveCompatWorkContextScopeKey({
+    req: params.req,
+    auth: params.auth,
+    requestAuth: params.requestAuth,
+    agentId: params.agentId,
+  });
+  if (!scopeKey) {
+    return {
+      ok: false,
+      errorMessage: "x-openclaw-work-context requires shared-secret or trusted-proxy compat auth.",
+    };
+  }
+  if (explicit) {
+    bindWorkContextToSession({
+      scopeKey,
+      workContextId,
+      sessionKey: explicit,
+    });
+    return {
+      ok: true,
+      sessionKey: explicit,
+      workContextId,
+    };
+  }
+  const existing = resolveWorkContextBinding({
+    scopeKey,
+    workContextId,
+  });
+  const sessionKey =
+    existing?.sessionKey ??
+    buildCanonicalWorkContextSessionKey({
+      agentId: params.agentId,
+      scopeKey,
+      workContextId,
+    });
+  if (!existing) {
+    bindWorkContextToSession({
+      scopeKey,
+      workContextId,
+      sessionKey,
+    });
+  }
+  return {
+    ok: true,
+    sessionKey,
+    workContextId,
+  };
+}
+
 export function resolveGatewayRequestContext(params: {
   req: IncomingMessage;
   model: string | undefined;
@@ -304,19 +422,47 @@ export function resolveGatewayRequestContext(params: {
   sessionPrefix: string;
   defaultMessageChannel: string;
   useMessageChannelHeader?: boolean;
-}): { agentId: string; sessionKey: string; messageChannel: string } {
+  auth?: ResolvedGatewayAuth;
+  requestAuth?: AuthorizedGatewayHttpRequest;
+}):
+  | {
+      ok: true;
+      value: {
+        agentId: string;
+        sessionKey: string;
+        messageChannel: string;
+        workContextId?: string;
+      };
+    }
+  | {
+      ok: false;
+      errorMessage: string;
+    } {
   const agentId = resolveAgentIdForRequest({ req: params.req, model: params.model });
-  const sessionKey = resolveSessionKey({
+  const session = resolveGatewayCompatSessionKey({
     req: params.req,
+    auth: params.auth,
+    requestAuth: params.requestAuth,
     agentId,
     user: params.user,
     prefix: params.sessionPrefix,
   });
+  if (!session.ok) {
+    return session;
+  }
 
   const messageChannel = params.useMessageChannelHeader
     ? (normalizeMessageChannel(getHeader(params.req, "x-openclaw-message-channel")) ??
       params.defaultMessageChannel)
     : params.defaultMessageChannel;
 
-  return { agentId, sessionKey, messageChannel };
+  return {
+    ok: true,
+    value: {
+      agentId,
+      sessionKey: session.sessionKey,
+      messageChannel,
+      workContextId: session.workContextId,
+    },
+  };
 }
