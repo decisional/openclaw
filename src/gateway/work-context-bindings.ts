@@ -23,6 +23,8 @@ type PersistedWorkContextBindingsFile = {
 
 const FILE_VERSION = 1;
 const BINDING_ID_PREFIX = "work-context:";
+const BINDING_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_BINDINGS = 1_000;
 const bindingsByScopedKey = new Map<string, WorkContextBindingRecord>();
 let bindingsLoaded = false;
 let persistPromise: Promise<void> = Promise.resolve();
@@ -56,6 +58,50 @@ function toPersistedFile(): PersistedWorkContextBindingsFile {
   };
 }
 
+function isBindingExpired(binding: WorkContextBindingRecord, now: number): boolean {
+  return now - binding.lastResolvedAt > BINDING_TTL_MS;
+}
+
+function upsertBindingRecord(
+  key: string,
+  record: WorkContextBindingRecord,
+): WorkContextBindingRecord {
+  bindingsByScopedKey.delete(key);
+  bindingsByScopedKey.set(key, record);
+  return record;
+}
+
+function pruneExpiredBindings(now: number): boolean {
+  let removed = false;
+  for (const [key, binding] of bindingsByScopedKey.entries()) {
+    if (!isBindingExpired(binding, now)) {
+      continue;
+    }
+    bindingsByScopedKey.delete(key);
+    removed = true;
+  }
+  return removed;
+}
+
+function evictOverflowBindings(): boolean {
+  let removed = false;
+  while (bindingsByScopedKey.size > MAX_BINDINGS) {
+    const oldestKey = bindingsByScopedKey.keys().next().value;
+    if (!oldestKey) {
+      return removed;
+    }
+    bindingsByScopedKey.delete(oldestKey);
+    removed = true;
+  }
+  return removed;
+}
+
+function compactBindings(now: number): boolean {
+  const pruned = pruneExpiredBindings(now);
+  const evicted = evictOverflowBindings();
+  return pruned || evicted;
+}
+
 function loadBindingsIntoMemory(): void {
   if (bindingsLoaded) {
     return;
@@ -73,7 +119,7 @@ function loadBindingsIntoMemory(): void {
     if (!scopeKey || !workContextId || !sessionKey) {
       continue;
     }
-    bindingsByScopedKey.set(buildScopedKey(scopeKey, workContextId), {
+    upsertBindingRecord(buildScopedKey(scopeKey, workContextId), {
       bindingId: normalizeValue(binding.bindingId) || buildBindingId(scopeKey, workContextId),
       scopeKey,
       workContextId,
@@ -88,9 +134,11 @@ function loadBindingsIntoMemory(): void {
           : Date.now(),
     });
   }
+  compactBindings(Date.now());
 }
 
 async function persistBindings(): Promise<void> {
+  compactBindings(Date.now());
   await writeJsonFileAtomically(resolveBindingsPath(), toPersistedFile());
 }
 
@@ -131,18 +179,24 @@ export function resolveWorkContextBinding(params: {
   }
   loadBindingsIntoMemory();
   const key = buildScopedKey(scopeKey, workContextId);
+  const now = params.now ?? Date.now();
   const binding = bindingsByScopedKey.get(key) ?? null;
   if (!binding) {
     return null;
   }
-  if (params.touch !== false) {
-    const touchedAt = params.now ?? Date.now();
-    bindingsByScopedKey.set(key, {
-      ...binding,
-      lastResolvedAt: touchedAt,
-    });
+  if (isBindingExpired(binding, now)) {
+    bindingsByScopedKey.delete(key);
     void enqueuePersist();
-    return bindingsByScopedKey.get(key) ?? binding;
+    return null;
+  }
+  if (params.touch !== false) {
+    const touchedBinding = upsertBindingRecord(key, {
+      ...binding,
+      lastResolvedAt: now,
+    });
+    compactBindings(now);
+    void enqueuePersist();
+    return bindingsByScopedKey.get(key) ?? touchedBinding;
   }
   return binding;
 }
@@ -171,9 +225,10 @@ export function bindWorkContextToSession(params: {
     boundAt: existing?.boundAt ?? now,
     lastResolvedAt: now,
   };
-  bindingsByScopedKey.set(key, record);
+  const inserted = upsertBindingRecord(key, record);
+  compactBindings(now);
   void enqueuePersist();
-  return record;
+  return bindingsByScopedKey.get(key) ?? inserted;
 }
 
 export const __testing = {
@@ -197,5 +252,9 @@ export const __testing = {
     return [...bindingsByScopedKey.values()].toSorted((a, b) =>
       a.bindingId.localeCompare(b.bindingId),
     );
+  },
+  limits: {
+    ttlMs: BINDING_TTL_MS,
+    maxBindings: MAX_BINDINGS,
   },
 };

@@ -53,11 +53,12 @@ describe("work-context bindings", () => {
   });
 
   it("persists bindings and reloads them after the in-memory cache is cleared", async () => {
+    const now = Date.now();
     bindWorkContextToSession({
       scopeKey: "compat:token:agent:main",
       workContextId: "ws_1:frontdesk:abc",
       sessionKey: "agent:main:work-context:1234",
-      now: 100,
+      now,
     });
     await __testing.flushPersistForTests();
     __testing.resetWorkContextBindingsForTests();
@@ -70,29 +71,126 @@ describe("work-context bindings", () => {
       }),
     ).toMatchObject({
       sessionKey: "agent:main:work-context:1234",
-      boundAt: 100,
+      boundAt: now,
     });
   });
 
   it("rebinds an existing work context to a new explicit session key", () => {
+    const now = Date.now();
     bindWorkContextToSession({
       scopeKey: "compat:token:agent:main",
       workContextId: "ws_1:frontdesk:abc",
       sessionKey: "agent:main:work-context:1234",
-      now: 100,
+      now,
     });
 
     const rebound = bindWorkContextToSession({
       scopeKey: "compat:token:agent:main",
       workContextId: "ws_1:frontdesk:abc",
       sessionKey: "agent:main:custom-session",
-      now: 200,
+      now: now + 100,
     });
 
     expect(rebound).toMatchObject({
       sessionKey: "agent:main:custom-session",
-      boundAt: 100,
-      lastResolvedAt: 200,
+      boundAt: now,
+      lastResolvedAt: now + 100,
+    });
+  });
+
+  it("expires stale bindings on lookup and persists the cleanup", async () => {
+    const now = Date.now();
+    bindWorkContextToSession({
+      scopeKey: "compat:token:agent:main",
+      workContextId: "ws_1:frontdesk:stale",
+      sessionKey: "agent:main:work-context:stale",
+      now,
+    });
+
+    expect(
+      resolveWorkContextBinding({
+        scopeKey: "compat:token:agent:main",
+        workContextId: "ws_1:frontdesk:stale",
+        now: now + __testing.limits.ttlMs + 1,
+        touch: false,
+      }),
+    ).toBeNull();
+
+    await __testing.flushPersistForTests();
+    __testing.resetWorkContextBindingsForTests();
+
+    expect(
+      resolveWorkContextBinding({
+        scopeKey: "compat:token:agent:main",
+        workContextId: "ws_1:frontdesk:stale",
+        touch: false,
+      }),
+    ).toBeNull();
+  });
+
+  it("evicts the oldest bindings when the store exceeds the max size", () => {
+    const now = Date.now();
+    for (let index = 0; index < __testing.limits.maxBindings + 1; index += 1) {
+      bindWorkContextToSession({
+        scopeKey: "compat:token:agent:main",
+        workContextId: `ws_1:frontdesk:${index}`,
+        sessionKey: `agent:main:work-context:${index}`,
+        now: now + index,
+      });
+    }
+
+    expect(__testing.listBindings()).toHaveLength(__testing.limits.maxBindings);
+    expect(
+      resolveWorkContextBinding({
+        scopeKey: "compat:token:agent:main",
+        workContextId: "ws_1:frontdesk:0",
+        touch: false,
+      }),
+    ).toBeNull();
+    expect(
+      resolveWorkContextBinding({
+        scopeKey: "compat:token:agent:main",
+        workContextId: `ws_1:frontdesk:${__testing.limits.maxBindings}`,
+        touch: false,
+      }),
+    ).toMatchObject({
+      sessionKey: `agent:main:work-context:${__testing.limits.maxBindings}`,
+    });
+  });
+
+  it("drops expired bindings before persisting newer ones to disk", async () => {
+    const now = Date.now();
+    bindWorkContextToSession({
+      scopeKey: "compat:token:agent:main",
+      workContextId: "ws_1:frontdesk:expired",
+      sessionKey: "agent:main:work-context:expired",
+      now: now - __testing.limits.ttlMs - 1,
+    });
+    bindWorkContextToSession({
+      scopeKey: "compat:token:agent:main",
+      workContextId: "ws_1:frontdesk:fresh",
+      sessionKey: "agent:main:work-context:fresh",
+      now,
+    });
+
+    await __testing.flushPersistForTests();
+    __testing.resetWorkContextBindingsForTests();
+
+    expect(
+      resolveWorkContextBinding({
+        scopeKey: "compat:token:agent:main",
+        workContextId: "ws_1:frontdesk:expired",
+        touch: false,
+      }),
+    ).toBeNull();
+    expect(
+      resolveWorkContextBinding({
+        scopeKey: "compat:token:agent:main",
+        workContextId: "ws_1:frontdesk:fresh",
+        touch: false,
+      }),
+    ).toMatchObject({
+      sessionKey: "agent:main:work-context:fresh",
     });
   });
 });
