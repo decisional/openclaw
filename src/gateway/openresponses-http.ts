@@ -84,6 +84,7 @@ type ResponseSessionScope = {
   authSubject: string;
   agentId: string;
   requestedSessionKey?: string;
+  workContextId?: string;
 };
 
 type ResponseSessionEntry = ResponseSessionScope & {
@@ -96,10 +97,12 @@ const responseSessionMap = new Map<string, ResponseSessionEntry>();
 function normalizeResponseSessionScope(scope: ResponseSessionScope): ResponseSessionScope {
   const authSubject = scope.authSubject.trim();
   const requestedSessionKey = scope.requestedSessionKey?.trim();
+  const workContextId = scope.workContextId?.trim();
   return {
     authSubject,
     agentId: scope.agentId,
     requestedSessionKey: requestedSessionKey || undefined,
+    workContextId: workContextId || undefined,
   };
 }
 
@@ -124,11 +127,13 @@ function createResponseSessionScope(params: {
   req: IncomingMessage;
   auth: ResolvedGatewayAuth;
   agentId: string;
+  workContextId?: string;
 }): ResponseSessionScope {
   return normalizeResponseSessionScope({
     authSubject: resolveResponseSessionAuthSubject({ req: params.req, auth: params.auth }),
     agentId: params.agentId,
     requestedSessionKey: getHeader(params.req, "x-openclaw-session-key"),
+    workContextId: params.workContextId,
   });
 }
 
@@ -139,8 +144,20 @@ function matchesResponseSessionScope(
   return (
     entry.authSubject === scope.authSubject &&
     entry.agentId === scope.agentId &&
-    entry.requestedSessionKey === scope.requestedSessionKey
+    entry.requestedSessionKey === scope.requestedSessionKey &&
+    entry.workContextId === scope.workContextId
   );
+}
+
+function setCompatContinuityHeaders(
+  res: ServerResponse,
+  params: { sessionKey: string; workContextId?: string },
+) {
+  if (!params.workContextId) {
+    return;
+  }
+  res.setHeader("x-openclaw-session-key", params.sessionKey);
+  res.setHeader("x-openclaw-work-context", params.workContextId);
 }
 
 function pruneExpiredResponseSessions(now: number) {
@@ -631,11 +648,20 @@ export async function handleOpenResponsesHttpRequest(
     sessionPrefix: "openresponses",
     defaultMessageChannel: "webchat",
     useMessageChannelHeader: true,
+    auth: opts.auth,
+    requestAuth: handled.requestAuth,
   });
+  if (!resolved.ok) {
+    sendJson(res, 400, {
+      error: { message: resolved.errorMessage, type: "invalid_request_error" },
+    });
+    return true;
+  }
   const responseSessionScope = createResponseSessionScope({
     req,
     auth: opts.auth,
-    agentId: resolved.agentId,
+    agentId: resolved.value.agentId,
+    workContextId: resolved.value.workContextId,
   });
   // Resolve session key: reuse previous_response_id only when it matches the
   // same auth-subject/agent/requested-session scope as the current request.
@@ -643,8 +669,14 @@ export async function handleOpenResponsesHttpRequest(
     payload.previous_response_id,
     responseSessionScope,
   );
-  const sessionKey = previousSessionKey ?? resolved.sessionKey;
-  const messageChannel = resolved.messageChannel;
+  const sessionKey =
+    resolved.value.workContextId &&
+    previousSessionKey &&
+    previousSessionKey !== resolved.value.sessionKey
+      ? resolved.value.sessionKey
+      : (previousSessionKey ?? resolved.value.sessionKey);
+  const messageChannel = resolved.value.messageChannel;
+  const workContextId = resolved.value.workContextId;
 
   // Build prompt from input
   const prompt = buildAgentPrompt(payload.input);
@@ -751,6 +783,7 @@ export async function handleOpenResponsesHttpRequest(
           usage,
         });
         rememberResponseSession();
+        setCompatContinuityHeaders(res, { sessionKey, workContextId });
         sendJson(res, 200, response);
         return true;
       }
@@ -779,6 +812,7 @@ export async function handleOpenResponsesHttpRequest(
       });
 
       rememberResponseSession();
+      setCompatContinuityHeaders(res, { sessionKey, workContextId });
       sendJson(res, 200, response);
     } catch (err) {
       if (abortController.signal.aborted) {
@@ -804,6 +838,7 @@ export async function handleOpenResponsesHttpRequest(
   // Streaming mode
   // ─────────────────────────────────────────────────────────────────────────
 
+  setCompatContinuityHeaders(res, { sessionKey, workContextId });
   setSseHeaders(res);
 
   let accumulatedText = "";
@@ -868,6 +903,7 @@ export async function handleOpenResponsesHttpRequest(
     });
 
     rememberResponseSession();
+    setCompatContinuityHeaders(res, { sessionKey, workContextId });
     writeSseEvent(res, { type: "response.completed", response: finalResponse });
     writeDone(res);
     res.end();

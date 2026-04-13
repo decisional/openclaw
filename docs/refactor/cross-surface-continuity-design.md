@@ -8,8 +8,6 @@ OpenClaw continuity is session-key based. That works within a surface, but a wor
 
 - OpenClaw as **receptionist**:
   a user starts in Slack, OpenClaw investigates via API/tools, and then replies back in the same Slack conversation.
-- OpenClaw as **fixer**:
-  a platform-initiated failure run asks OpenClaw to investigate, talk to users if needed, and continue execution.
 - OpenClaw as **HITL approval gateway**:
   OpenClaw coordinates human approvals in Slack, then resumes/updates workflow execution.
 
@@ -39,7 +37,7 @@ If you are reviewing this design (human or AI), use this checklist:
 4. Verify Slack compatibility:
    API -> Slack handoff requires persisted conversation binding, not work-context lookup alone.
 5. Verify ingress coverage:
-   fixer/hook ingress is included in V1, not deferred.
+   V1 covers the compat APIs first; `/hooks/agent` parity is deferred.
 6. Verify constraints:
    this design should not require prompt-time sibling-session fan-out in `assemble()`.
 7. Verify rollout risk:
@@ -83,11 +81,10 @@ This keeps cross-surface continuity deterministic without scanning multiple sess
 
 ### V1 Ingress Surfaces
 
-V1 must apply the same resolution semantics to all ingress paths used by the target scenarios:
+V1 applies the same resolution semantics to the compat APIs used by the target scenarios:
 
 - `/v1/chat/completions`
 - `/v1/responses`
-- `/hooks/agent` (direct request and mapping-based dispatch paths)
 
 ### Important Nuance: Shared Routing vs Header Ingress
 
@@ -95,8 +92,8 @@ V1 must apply the same resolution semantics to all ingress paths used by the tar
 - The gateway is still where HTTP headers are parsed.
 - Therefore, cross-surface continuity needs three pieces:
   1. Header-driven work-context resolution for API ingress.
-  2. Hook-ingress work-context resolution for platform-initiated fixer/HITL flows.
-  3. A persisted conversation binding write path for API -> Slack handoff so Slack inbound can resolve to the same target session deterministically.
+  2. A persisted conversation binding write path for API -> Slack handoff so Slack inbound can resolve to the same target session deterministically.
+  3. Hook-ingress parity later, after the compat path is proven.
 
 ### V1 Scope Boundaries
 
@@ -125,10 +122,6 @@ Minimal v1 implementation:
   - include resolved/echoed work-context metadata in response headers (if provided)
 - `src/gateway/openresponses-http.ts`
   - same as OpenAI gateway path
-- `src/gateway/server-http.ts`
-  - apply the same scoped work-context/session resolution for `/hooks/agent` request path
-- `src/gateway/hooks.ts`
-  - extend mapping payload normalization to carry optional work-context and route via the same resolver
 - `src/config/sessions/session-key.ts`
   - keep explicit `ctx.SessionKey` precedence and route work-context-resolved keys through the same normalization path
 - `extensions/slack/src/monitor/message-handler/prepare.ts`
@@ -164,12 +157,13 @@ Minimal v1 implementation:
 ### Phase 1 (small code PR)
 
 - Add scoped `x-openclaw-work-context` parsing + resolver + tests.
-- Add equivalent resolver path for `/hooks/agent`.
-- Add conversation-binding writes for API -> Slack handoff.
+- Teach Slack inbound routing to honor persisted conversation bindings.
+- Add response metadata so API callers can persist/bind the resolved session.
 - Keep all existing behavior unchanged when header is absent.
 
 ### Phase 2 (operator ergonomics)
 
+- Add `/hooks/agent` work-context parity for fixer/platform-initiated flows.
 - Add optional sessions API/tooling to bind/unbind/list work-context mappings.
 - Add minimal diagnostics (`/status` or debug output) showing active work-context mapping.
 
@@ -185,4 +179,4 @@ Minimal v1 implementation:
 3. Existing clients without the header see no behavior change.
 4. `x-openclaw-session-key` still takes precedence over work-context routing.
 5. No new `assemble()`-time sibling-session scanning is introduced.
-6. End-to-end tests show continuity across OpenAI/OpenResponses/hooks + Slack handoff when the same scoped work context mapping is bound.
+6. End-to-end tests show continuity across OpenAI/OpenResponses + Slack handoff when the same scoped work context mapping is bound.

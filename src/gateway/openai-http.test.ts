@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { HISTORY_CONTEXT_MARKER } from "../auto-reply/reply/history.js";
 import { CURRENT_MESSAGE_MARKER } from "../auto-reply/reply/mentions.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
@@ -19,15 +19,23 @@ installGatewayTestHooks({ scope: "suite" });
 let startGatewayServer: typeof import("./server.js").startGatewayServer;
 let enabledServer: Awaited<ReturnType<typeof startServer>>;
 let enabledPort: number;
+let workContextBindingTesting: {
+  resetWorkContextBindingsForTests(params?: { deletePersistedFile?: boolean }): void;
+};
 
 beforeAll(async () => {
   ({ startGatewayServer } = await import("./server.js"));
+  ({ __testing: workContextBindingTesting } = await import("./work-context-bindings.js"));
   enabledPort = await getFreePort();
   enabledServer = await startServer(enabledPort);
 });
 
 afterAll(async () => {
   await enabledServer.close({ reason: "openai http enabled suite done" });
+});
+
+beforeEach(() => {
+  workContextBindingTesting.resetWorkContextBindingsForTests({ deletePersistedFile: true });
 });
 
 async function startServerWithDefaultConfig(port: number) {
@@ -712,6 +720,60 @@ describe("OpenAI-compatible HTTP API (e2e)", () => {
       }
     } finally {
       // shared server
+    }
+  });
+
+  it("routes trusted work-context requests to one session and echoes continuity headers", async () => {
+    const port = await getFreePort();
+    const server = await startTokenServer(port);
+    try {
+      agentCommand.mockClear();
+      agentCommand.mockResolvedValueOnce({ payloads: [{ text: "first" }] } as never);
+
+      const first = await postChatCompletions(
+        port,
+        {
+          model: "openclaw",
+          messages: [{ role: "user", content: "hi" }],
+        },
+        {
+          authorization: "Bearer secret",
+          "x-openclaw-work-context": "ws_1:frontdesk:abc",
+        },
+      );
+      expect(first.status).toBe(200);
+      const firstSessionKey = (
+        (agentCommand.mock.calls[0] as unknown[] | undefined)?.[0] as
+          | { sessionKey?: string }
+          | undefined
+      )?.sessionKey;
+      expect(first.headers.get("x-openclaw-work-context")).toBe("ws_1:frontdesk:abc");
+      expect(first.headers.get("x-openclaw-session-key")).toBe(firstSessionKey);
+      await first.text();
+
+      agentCommand.mockResolvedValueOnce({ payloads: [{ text: "second" }] } as never);
+      const second = await postChatCompletions(
+        port,
+        {
+          model: "openclaw",
+          messages: [{ role: "user", content: "hi again" }],
+        },
+        {
+          authorization: "Bearer secret",
+          "x-openclaw-work-context": "ws_1:frontdesk:abc",
+        },
+      );
+      expect(second.status).toBe(200);
+      const secondSessionKey = (
+        (agentCommand.mock.calls[1] as unknown[] | undefined)?.[0] as
+          | { sessionKey?: string }
+          | undefined
+      )?.sessionKey;
+      expect(secondSessionKey).toBe(firstSessionKey);
+      expect(second.headers.get("x-openclaw-session-key")).toBe(firstSessionKey);
+      await second.text();
+    } finally {
+      await server.close({ reason: "openai trusted work-context test done" });
     }
   });
 

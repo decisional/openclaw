@@ -27,9 +27,13 @@ let openResponsesTesting: {
   ): string | undefined;
   getResponseSessionIds(): string[];
 };
+let workContextBindingTesting: {
+  resetWorkContextBindingsForTests(params?: { deletePersistedFile?: boolean }): void;
+};
 
 beforeAll(async () => {
   ({ __testing: openResponsesTesting } = await import("./openresponses-http.js"));
+  ({ __testing: workContextBindingTesting } = await import("./work-context-bindings.js"));
   enabledPort = await getFreePort();
   enabledServer = await startServer(enabledPort, { openResponsesEnabled: true });
 });
@@ -40,6 +44,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   openResponsesTesting.resetResponseSessionState();
+  workContextBindingTesting.resetWorkContextBindingsForTests({ deletePersistedFile: true });
 });
 
 async function startServer(port: number, opts?: { openResponsesEnabled?: boolean }) {
@@ -1022,6 +1027,132 @@ describe("OpenResponses HTTP API (e2e)", () => {
       | undefined;
     expect(secondOpts?.sessionKey).toBe(firstOpts?.sessionKey);
     await ensureResponseConsumed(secondResponse);
+  });
+
+  it("routes trusted work-context requests to one session and echoes continuity headers", async () => {
+    const port = await getFreePort();
+    const server = await startTokenServer(port, { openResponsesEnabled: true });
+    try {
+      agentCommand.mockClear();
+      agentCommand.mockResolvedValueOnce({
+        payloads: [{ text: "First turn." }],
+      } as never);
+
+      const firstResponse = await postResponses(
+        port,
+        {
+          stream: false,
+          model: "openclaw",
+          input: "hello",
+        },
+        {
+          authorization: "Bearer secret",
+          "x-openclaw-work-context": "ws_1:hitl:node_42",
+        },
+      );
+      expect(firstResponse.status).toBe(200);
+      const firstSessionKey = (
+        (agentCommand.mock.calls[0] as unknown[] | undefined)?.[0] as
+          | { sessionKey?: string }
+          | undefined
+      )?.sessionKey;
+      expect(firstResponse.headers.get("x-openclaw-work-context")).toBe("ws_1:hitl:node_42");
+      expect(firstResponse.headers.get("x-openclaw-session-key")).toBe(firstSessionKey);
+      await ensureResponseConsumed(firstResponse);
+
+      agentCommand.mockResolvedValueOnce({
+        payloads: [{ text: "Second turn." }],
+      } as never);
+
+      const secondResponse = await postResponses(
+        port,
+        {
+          stream: false,
+          model: "openclaw",
+          input: "hello again",
+        },
+        {
+          authorization: "Bearer secret",
+          "x-openclaw-work-context": "ws_1:hitl:node_42",
+        },
+      );
+      expect(secondResponse.status).toBe(200);
+      const secondSessionKey = (
+        (agentCommand.mock.calls[1] as unknown[] | undefined)?.[0] as
+          | { sessionKey?: string }
+          | undefined
+      )?.sessionKey;
+      expect(secondSessionKey).toBe(firstSessionKey);
+      expect(secondResponse.headers.get("x-openclaw-session-key")).toBe(firstSessionKey);
+      await ensureResponseConsumed(secondResponse);
+    } finally {
+      await server.close({ reason: "trusted work-context test done" });
+    }
+  });
+
+  it("lets explicit session key precedence rebind a trusted work context even with previous_response_id", async () => {
+    const port = await getFreePort();
+    const server = await startTokenServer(port, { openResponsesEnabled: true });
+    try {
+      agentCommand.mockClear();
+      agentCommand.mockResolvedValueOnce({
+        payloads: [{ text: "First turn." }],
+      } as never);
+
+      const firstResponse = await postResponses(
+        port,
+        {
+          stream: false,
+          model: "openclaw",
+          input: "hello",
+        },
+        {
+          authorization: "Bearer secret",
+          "x-openclaw-work-context": "ws_1:hitl:node_42",
+        },
+      );
+      expect(firstResponse.status).toBe(200);
+      const firstJson = (await firstResponse.json()) as { id?: string };
+      const originalSessionKey = (
+        (agentCommand.mock.calls[0] as unknown[] | undefined)?.[0] as
+          | { sessionKey?: string }
+          | undefined
+      )?.sessionKey;
+      expect(originalSessionKey).toBeTruthy();
+
+      agentCommand.mockResolvedValueOnce({
+        payloads: [{ text: "Rebound turn." }],
+      } as never);
+
+      const reboundResponse = await postResponses(
+        port,
+        {
+          stream: false,
+          model: "openclaw",
+          previous_response_id: firstJson.id,
+          input: "hello again",
+        },
+        {
+          authorization: "Bearer secret",
+          "x-openclaw-work-context": "ws_1:hitl:node_42",
+          "x-openclaw-session-key": "agent:main:custom-work-context",
+        },
+      );
+      expect(reboundResponse.status).toBe(200);
+      const reboundSessionKey = (
+        (agentCommand.mock.calls[1] as unknown[] | undefined)?.[0] as
+          | { sessionKey?: string }
+          | undefined
+      )?.sessionKey;
+      expect(reboundSessionKey).toBe("agent:main:custom-work-context");
+      expect(reboundSessionKey).not.toBe(originalSessionKey);
+      expect(reboundResponse.headers.get("x-openclaw-session-key")).toBe(
+        "agent:main:custom-work-context",
+      );
+      await ensureResponseConsumed(reboundResponse);
+    } finally {
+      await server.close({ reason: "work-context rebind test done" });
+    }
   });
 
   it("stores response session mappings when the response is emitted", async () => {

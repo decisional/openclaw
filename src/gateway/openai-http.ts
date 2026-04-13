@@ -109,6 +109,17 @@ function writeSse(res: ServerResponse, data: unknown) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+function setCompatContinuityHeaders(
+  res: ServerResponse,
+  params: { sessionKey: string; workContextId?: string },
+) {
+  if (!params.workContextId) {
+    return;
+  }
+  res.setHeader("x-openclaw-session-key", params.sessionKey);
+  res.setHeader("x-openclaw-work-context", params.workContextId);
+}
+
 function buildAgentCommandInput(params: {
   prompt: { message: string; extraSystemPrompt?: string; images?: ImageContent[] };
   modelOverride?: string;
@@ -454,14 +465,23 @@ export async function handleOpenAiHttpRequest(
   const model = typeof payload.model === "string" ? payload.model : "openclaw";
   const user = typeof payload.user === "string" ? payload.user : undefined;
 
-  const { agentId, sessionKey, messageChannel } = resolveGatewayRequestContext({
+  const resolvedContext = resolveGatewayRequestContext({
     req,
     model,
     user,
     sessionPrefix: "openai",
     defaultMessageChannel: "webchat",
     useMessageChannelHeader: true,
+    auth: opts.auth,
+    requestAuth: handled.requestAuth,
   });
+  if (!resolvedContext.ok) {
+    sendJson(res, 400, {
+      error: { message: resolvedContext.errorMessage, type: "invalid_request_error" },
+    });
+    return true;
+  }
+  const { agentId, sessionKey, messageChannel, workContextId } = resolvedContext.value;
   const { modelOverride, errorMessage: modelError } = await resolveOpenAiCompatModelOverride({
     req,
     agentId,
@@ -527,6 +547,7 @@ export async function handleOpenAiHttpRequest(
 
       const content = resolveAgentResponseText(result);
 
+      setCompatContinuityHeaders(res, { sessionKey, workContextId });
       sendJson(res, 200, {
         id: runId,
         object: "chat.completion",
@@ -555,6 +576,7 @@ export async function handleOpenAiHttpRequest(
     return true;
   }
 
+  setCompatContinuityHeaders(res, { sessionKey, workContextId });
   setSseHeaders(res);
 
   let wroteRole = false;

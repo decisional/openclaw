@@ -3,9 +3,16 @@ import os from "node:os";
 import path from "node:path";
 import type { App } from "@slack/bolt";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
+import {
+  __testing as sessionBindingTesting,
+  getSessionBindingService,
+  registerSessionBindingAdapter,
+  type SessionBindingBindInput,
+  type SessionBindingRecord,
+} from "openclaw/plugin-sdk/conversation-runtime";
 import { resolveAgentRoute } from "openclaw/plugin-sdk/routing";
 import { resolveThreadSessionKeys } from "openclaw/plugin-sdk/routing";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { expectChannelInboundContextContract as expectInboundContextContract } from "../../../../../src/channels/plugins/contracts/test-helpers.js";
 import type { ResolvedSlackAccount } from "../../accounts.js";
 import type { SlackMessageEvent } from "../../types.js";
@@ -29,6 +36,48 @@ describe("slack prepareSlackMessage inbound contract", () => {
   beforeAll(() => {
     fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-slack-thread-"));
   });
+
+  beforeEach(() => {
+    sessionBindingTesting.resetSessionBindingAdaptersForTests();
+  });
+
+  function installSlackBindingAdapter() {
+    const records = new Map<string, SessionBindingRecord>();
+    const keyFor = (conversationId: string, parentConversationId?: string) =>
+      `${conversationId}\u241f${parentConversationId ?? ""}`;
+    registerSessionBindingAdapter({
+      channel: "slack",
+      accountId: "default",
+      bind: async (input: SessionBindingBindInput) => {
+        const record: SessionBindingRecord = {
+          bindingId: `test:${keyFor(
+            input.conversation.conversationId,
+            input.conversation.parentConversationId,
+          )}`,
+          targetSessionKey: input.targetSessionKey,
+          targetKind: input.targetKind,
+          conversation: {
+            channel: "slack",
+            accountId: "default",
+            conversationId: input.conversation.conversationId,
+            parentConversationId: input.conversation.parentConversationId,
+          },
+          status: "active",
+          boundAt: Date.now(),
+        };
+        records.set(
+          keyFor(record.conversation.conversationId, record.conversation.parentConversationId),
+          record,
+        );
+        return record;
+      },
+      listBySession: (targetSessionKey) =>
+        [...records.values()].filter((entry) => entry.targetSessionKey === targetSessionKey),
+      resolveByConversation: (ref) =>
+        records.get(keyFor(ref.conversationId, ref.parentConversationId)) ?? null,
+      unbind: async () => [],
+    });
+  }
 
   afterAll(() => {
     if (fixtureRoot) {
@@ -207,6 +256,72 @@ describe("slack prepareSlackMessage inbound contract", () => {
 
     expect(prepared).toBeTruthy();
     expectInboundContextContract(prepared!.ctxPayload as any);
+  });
+
+  it("routes direct messages through an existing bound conversation", async () => {
+    installSlackBindingAdapter();
+    await getSessionBindingService().bind({
+      targetSessionKey: "agent:main:work-context:dm-bound",
+      targetKind: "session",
+      conversation: {
+        channel: "slack",
+        accountId: "default",
+        conversationId: "user:U1",
+      },
+    });
+
+    const prepared = await prepareWithDefaultCtx(
+      createSlackMessage({
+        channel: "D123",
+        channel_type: "im",
+        user: "U1",
+        text: "hi",
+        ts: "1.000",
+      }),
+    );
+
+    expect(prepared?.route.sessionKey).toBe("agent:main:work-context:dm-bound");
+    expect(prepared?.route.matchedBy).toBe("binding.channel");
+  });
+
+  it("routes thread replies through an existing bound thread conversation", async () => {
+    installSlackBindingAdapter();
+    await getSessionBindingService().bind({
+      targetSessionKey: "agent:main:work-context:thread-bound",
+      targetKind: "session",
+      conversation: {
+        channel: "slack",
+        accountId: "default",
+        conversationId: "100.000",
+        parentConversationId: "C123",
+      },
+    });
+
+    const prepared = await prepareThreadMessage(
+      createThreadSlackCtx({
+        cfg: {
+          channels: {
+            slack: {
+              enabled: true,
+              replyToMode: "all",
+              thread: { initialHistoryLimit: 20 },
+            },
+          },
+        } as OpenClawConfig,
+        replies: async () => ({ messages: [] }),
+      }),
+      {
+        channel: "C123",
+        channel_type: "channel",
+        user: "U2",
+        text: "reply in bound thread",
+        ts: "101.000",
+        thread_ts: "100.000",
+      },
+    );
+
+    expect(prepared?.route.sessionKey).toBe("agent:main:work-context:thread-bound");
+    expect(prepared?.route.matchedBy).toBe("binding.channel");
   });
 
   it("does not enable Slack status reactions when the message timestamp is missing", async () => {
