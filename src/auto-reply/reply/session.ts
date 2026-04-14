@@ -41,7 +41,6 @@ import {
 } from "../../shared/string-coerce.js";
 import { normalizeSessionDeliveryFields } from "../../utils/delivery-context.js";
 import { isInternalMessageChannel } from "../../utils/message-channel.js";
-import { resolveCommandAuthorization } from "../command-auth.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
 import { resolveConversationBindingContextFromMessage } from "./conversation-binding-input.js";
 import { normalizeInboundTextNewlines } from "./inbound-text.js";
@@ -133,19 +132,14 @@ export type SessionInitResult = {
   triggerBodyNormalized: string;
 };
 
-function isResetAuthorizedForContext(params: {
-  ctx: MsgContext;
-  cfg: OpenClawConfig;
-  commandAuthorized: boolean;
-}): boolean {
-  const auth = resolveCommandAuthorization(params);
-  if (!params.commandAuthorized && !auth.isAuthorizedSender) {
-    return false;
-  }
+function isResetAuthorizedForContext(params: { ctx: MsgContext }): boolean {
   const provider = params.ctx.Provider;
   const internalGatewayCaller = provider
     ? isInternalMessageChannel(provider)
     : isInternalMessageChannel(params.ctx.Surface);
+  // /new and /reset are session-maintenance commands, not privileged control
+  // commands. If a real chat message made it this far, allow the reset and let
+  // downstream command authorization continue to protect everything else.
   if (!internalGatewayCaller) {
     return true;
   }
@@ -217,7 +211,7 @@ export async function initSessionState(params: {
   cfg: OpenClawConfig;
   commandAuthorized: boolean;
 }): Promise<SessionInitResult> {
-  const { ctx, cfg, commandAuthorized } = params;
+  const { ctx, cfg } = params;
   const conversationBindingContext = resolveSessionConversationBindingContext(cfg, ctx);
   // Native slash commands (Telegram/Discord/Slack) are delivered on a separate
   // "slash session" key, but should mutate the target chat session.
@@ -313,8 +307,6 @@ export async function initSessionState(params: {
   const trimmedBody = rawBody.trim();
   const resetAuthorized = isResetAuthorizedForContext({
     ctx,
-    cfg,
-    commandAuthorized,
   });
   // Timestamp/message prefixes (e.g. "[Dec 4 17:35] ") are added by the
   // web inbox before we get here. They prevented reset triggers like "/new"
