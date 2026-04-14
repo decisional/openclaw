@@ -2,7 +2,7 @@
   agents: {
     defaults: {
       thinkingDefault: "high",
-      timeoutSeconds: 60,
+      timeoutSeconds: 120,
     },
   },
 
