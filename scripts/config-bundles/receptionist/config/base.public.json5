@@ -51,7 +51,7 @@
   },
 
   session: {
-    dmScope: "per-channel-peer",
+    dmScope: "per-peer",
   },
 
   channels: {
