@@ -64,6 +64,28 @@ import { resolveSlackThreadContextData } from "./prepare-thread-context.js";
 import type { PreparedSlackMessage } from "./types.js";
 
 const mentionRegexCache = new WeakMap<SlackMonitorContext, Map<string, RegExp[]>>();
+const DEFAULT_SESSION_RESET_TRIGGERS = ["/new", "/reset"];
+
+function matchesSlackSessionResetTrigger(text: string, cfg: SlackMonitorContext["cfg"]): boolean {
+  const normalized = normalizeLowercaseStringOrEmpty(text);
+  if (!normalized) {
+    return false;
+  }
+  const resetTriggers =
+    cfg.session?.resetTriggers && cfg.session.resetTriggers.length > 0
+      ? cfg.session.resetTriggers
+      : DEFAULT_SESSION_RESET_TRIGGERS;
+  for (const trigger of resetTriggers) {
+    const triggerLower = normalizeLowercaseStringOrEmpty(trigger);
+    if (!triggerLower) {
+      continue;
+    }
+    if (normalized === triggerLower || normalized.startsWith(`${triggerLower} `)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function resolveCachedMentionRegexes(
   ctx: SlackMonitorContext,
@@ -482,6 +504,7 @@ export async function prepareSlackMessage(params: {
   // Strip Slack mentions (<@U123>) before command detection so "@Labrador /new" is recognized
   const textForCommandDetection = stripSlackMentionsForCommandDetection(message.text ?? "");
   const hasControlCommandInMessage = hasControlCommand(textForCommandDetection, cfg);
+  const isSessionResetTrigger = matchesSlackSessionResetTrigger(textForCommandDetection, cfg);
 
   const ownerAuthorized = resolveSlackAllowListMatch({
     allowList: allowFromLower,
@@ -528,7 +551,7 @@ export async function prepareSlackMessage(params: {
   });
   const commandAuthorized = commandGate.commandAuthorized;
 
-  if (isRoomish && commandGate.shouldBlock) {
+  if (isRoomish && commandGate.shouldBlock && !isSessionResetTrigger) {
     logInboundDrop({
       log: logVerbose,
       channel: "slack",
