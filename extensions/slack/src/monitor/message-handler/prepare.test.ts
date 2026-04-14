@@ -825,6 +825,43 @@ describe("prepareSlackMessage sender prefix", () => {
     expect(result).not.toBeNull();
     expect(result?.ctxPayload.CommandAuthorized).toBe(true);
   });
+
+  it("allows non-owner Slack senders to issue /new", async () => {
+    const ctx = createSenderPrefixCtx({
+      channels: {},
+      allowFrom: [],
+      useAccessGroups: true,
+      slashCommand: {
+        enabled: false,
+        name: "openclaw",
+        sessionPrefix: "slack:slash",
+        ephemeral: true,
+      },
+    });
+
+    const result = await prepareSenderPrefixMessage(ctx, "<@BOT> /new", "1700000000.0003");
+
+    expect(result).not.toBeNull();
+    expect(result?.ctxPayload.CommandAuthorized).toBe(false);
+  });
+
+  it("still blocks other unauthorized control commands", async () => {
+    const ctx = createSenderPrefixCtx({
+      channels: {},
+      allowFrom: [],
+      useAccessGroups: true,
+      slashCommand: {
+        enabled: false,
+        name: "openclaw",
+        sessionPrefix: "slack:slash",
+        ephemeral: true,
+      },
+    });
+
+    const result = await prepareSenderPrefixMessage(ctx, "<@BOT> /status", "1700000000.0004");
+
+    expect(result).toBeNull();
+  });
 });
 
 describe("slack thread.requireExplicitMention", () => {
