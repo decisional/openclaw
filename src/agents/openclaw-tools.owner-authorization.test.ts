@@ -6,8 +6,8 @@ import {
 
 describe("createOpenClawTools owner authorization", () => {
   it("marks owner-only core tool names", () => {
-    expect(OPENCLAW_OWNER_ONLY_CORE_TOOL_NAMES).toEqual(["cron", "gateway", "nodes"]);
-    expect(isOpenClawOwnerOnlyCoreToolName("cron")).toBe(true);
+    expect(OPENCLAW_OWNER_ONLY_CORE_TOOL_NAMES).toEqual(["gateway", "nodes"]);
+    expect(isOpenClawOwnerOnlyCoreToolName("cron")).toBe(false);
     expect(isOpenClawOwnerOnlyCoreToolName("gateway")).toBe(true);
     expect(isOpenClawOwnerOnlyCoreToolName("nodes")).toBe(true);
   });
