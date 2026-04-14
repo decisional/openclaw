@@ -52,6 +52,24 @@
 
   session: {
     dmScope: "per-peer",
+    reset: {
+      mode: "daily",
+      atHour: 4,
+    },
+    resetByType: {
+      direct: {
+        mode: "idle",
+        idleMinutes: 1440,
+      },
+      thread: {
+        mode: "idle",
+        idleMinutes: 1440,
+      },
+      group: {
+        mode: "daily",
+        atHour: 4,
+      },
+    },
   },
 
   channels: {
