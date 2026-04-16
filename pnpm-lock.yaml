@@ -61,6 +61,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.2.0
         version: 1.2.0
+      '@decisional/cli':
+        specifier: latest
+        version: 0.1.6
       '@google/genai':
         specifier: ^1.49.0
         version: 1.49.0(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))
@@ -1799,6 +1802,11 @@ packages:
 
   '@d-fischer/typed-event-emitter@3.3.3':
     resolution: {integrity: sha512-OvSEOa8icfdWDqcRtjSEZtgJTFOFNgTjje7zaL0+nAtu2/kZtRCSK5wUMrI/aXtCH8o0Qz2vA8UqkhWUTARFQQ==}
+
+  '@decisional/cli@0.1.6':
+    resolution: {integrity: sha512-uJ8vzKqxWuFEHFAsHTCQ31BTRTd33XC7v50QDUrRtl2waqgHYnPw53ptNsCZ2ZaW1FZhdADU962cKYpZzn7GYw==}
+    engines: {node: '>=18.0.0'}
+    hasBin: true
 
   '@dependents/detective-less@5.0.1':
     resolution: {integrity: sha512-Y6+WUMsTFWE5jb20IFP4YGa5IrGY/+a/FbOSjDF/wz9gepU2hwCYSXRHP/vPwBvwcY3SVMASt4yXxbXNXigmZQ==}
@@ -8823,6 +8831,12 @@ snapshots:
   '@d-fischer/typed-event-emitter@3.3.3':
     dependencies:
       tslib: 2.8.1
+
+  '@decisional/cli@0.1.6':
+    dependencies:
+      chalk: 5.6.2
+      cli-table3: 0.6.5
+      commander: 12.1.0
 
   '@dependents/detective-less@5.0.1':
     dependencies:
