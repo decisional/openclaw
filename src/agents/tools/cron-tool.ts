@@ -446,7 +446,8 @@ DELIVERY (top-level):
   - Default for isolated agentTurn jobs (when delivery omitted): "announce"
   - announce: send to chat channel (optional channel/to target)
   - webhook: send finished-run event as HTTP POST to delivery.to (URL required)
-  - If the task needs to send to a specific chat/recipient, set announce delivery.channel/to; do not call messaging tools inside the run.
+  - mode="none": treat cron as a wake trigger and let the fresh agent session use normal tools, including message when needed.
+  - If you want the runner itself to post the result back, use announce delivery.channel/to instead of having the run send its own summary.
 
 CRITICAL CONSTRAINTS:
 - sessionTarget="main" REQUIRES payload.kind="systemEvent"
