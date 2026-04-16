@@ -48,7 +48,7 @@ struct CronJobEditor: View {
     @State var payloadKind: PayloadKind = .systemEvent
     @State var systemEventText: String = ""
     @State var agentMessage: String = ""
-    enum DeliveryChoice: String, CaseIterable, Identifiable { case announce, none; var id: String {
+    enum DeliveryChoice: String, CaseIterable, Identifiable { case announce, agent; var id: String {
         rawValue
     } }
     @State var deliveryMode: DeliveryChoice = .announce
@@ -329,7 +329,7 @@ struct CronJobEditor: View {
                     self.gridLabel("Delivery")
                     Picker("", selection: self.$deliveryMode) {
                         Text("Announce summary").tag(DeliveryChoice.announce)
-                        Text("None").tag(DeliveryChoice.none)
+                        Text("Agent wake-up").tag(DeliveryChoice.agent)
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)

@@ -319,6 +319,24 @@ describe("cron view", () => {
     expect(options).toContain("Webhook POST");
   });
 
+  it("shows agent wake-up delivery option for isolated agent turns", () => {
+    const container = document.createElement("div");
+    render(
+      renderCron(
+        createProps({
+          form: { ...DEFAULT_CRON_FORM, sessionTarget: "isolated", payloadKind: "agentTurn" },
+        }),
+      ),
+      container,
+    );
+
+    const options = Array.from(container.querySelectorAll("option")).map((opt) =>
+      (opt.textContent ?? "").trim(),
+    );
+    expect(options).toContain("Agent wake-up");
+    expect(options).not.toContain("None (internal)");
+  });
+
   it("normalizes stale announce selection in the form when unsupported", () => {
     const container = document.createElement("div");
     render(

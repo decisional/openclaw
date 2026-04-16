@@ -131,10 +131,10 @@ function resolveCronToolPolicy(params: {
     // was successfully resolved. When resolution fails the agent should not
     // be blocked by a target it cannot satisfy (#27898).
     requireExplicitMessageTarget: params.deliveryRequested && params.resolvedDelivery.ok,
-    // Cron-owned runs always route user-facing delivery through the runner
-    // itself. Shared callers keep the previous behavior so non-cron paths do
-    // not silently lose the message tool when no explicit delivery is active.
-    disableMessageTool: params.deliveryContract === "cron-owned" ? true : params.deliveryRequested,
+    // Explicit runner-owned delivery still disables direct messaging so
+    // announce-mode jobs do not double-send. For plain wake-up jobs
+    // (delivery.mode="none"), let the fresh cron session use the normal toolset.
+    disableMessageTool: params.deliveryRequested,
   };
 }
 
@@ -194,6 +194,18 @@ function appendCronDeliveryInstruction(params: {
     return params.commandBody;
   }
   return `${params.commandBody}\n\nReturn your summary as plain text; it will be delivered automatically. If the task explicitly calls for messaging a specific external recipient, note who/where it should go instead of sending it yourself.`.trim();
+}
+
+function appendCronSourceSessionInstruction(params: {
+  commandBody: string;
+  sessionTarget: CronJob["sessionTarget"];
+  sourceSessionKey: string | undefined;
+}) {
+  const sourceSessionKey = params.sourceSessionKey?.trim();
+  if (params.sessionTarget !== "isolated" || !sourceSessionKey) {
+    return params.commandBody;
+  }
+  return `${params.commandBody}\n\nThis cron run was scheduled from session "${sourceSessionKey}". Before acting, call sessions_history for that session so you recover the original user request, constraints, and recent discussion. Then complete the task in this fresh session using the normal toolset.`.trim();
 }
 
 function resolvePositiveContextTokens(value: unknown): number | undefined {
@@ -439,6 +451,11 @@ async function prepareCronRunContext(params: {
   } else {
     commandBody = `${base}\n${timeLine}`.trim();
   }
+  commandBody = appendCronSourceSessionInstruction({
+    commandBody,
+    sessionTarget: input.job.sessionTarget,
+    sourceSessionKey: input.job.sessionKey,
+  });
   commandBody = appendCronDeliveryInstruction({ commandBody, deliveryRequested });
 
   const skillsSnapshot = await resolveCronSkillsSnapshot({

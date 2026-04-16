@@ -93,16 +93,23 @@ export function supportsAnnounceDelivery(
 }
 
 export function normalizeCronFormState(form: CronFormState): CronFormState {
-  if (form.deliveryMode !== "announce") {
+  const supportsAgentWake = supportsAnnounceDelivery(form);
+  if (supportsAgentWake) {
+    if (form.deliveryMode === "none") {
+      return {
+        ...form,
+        deliveryMode: "agent",
+      };
+    }
     return form;
   }
-  if (supportsAnnounceDelivery(form)) {
-    return form;
+  if (form.deliveryMode === "announce" || form.deliveryMode === "agent") {
+    return {
+      ...form,
+      deliveryMode: "none",
+    };
   }
-  return {
-    ...form,
-    deliveryMode: "none",
-  };
+  return form;
 }
 
 export function validateCronForm(form: CronFormState): CronFieldErrors {
@@ -655,21 +662,23 @@ export async function addCronJob(state: CronState) {
     }
     const selectedDeliveryMode = form.deliveryMode;
     const delivery =
-      selectedDeliveryMode && selectedDeliveryMode !== "none"
+      selectedDeliveryMode === "announce"
         ? {
             mode: selectedDeliveryMode,
-            channel:
-              selectedDeliveryMode === "announce"
-                ? form.deliveryChannel.trim() || "last"
-                : undefined,
+            channel: form.deliveryChannel.trim() || "last",
             to: form.deliveryTo.trim() || undefined,
-            accountId:
-              selectedDeliveryMode === "announce" ? form.deliveryAccountId.trim() : undefined,
+            accountId: form.deliveryAccountId.trim(),
             bestEffort: form.deliveryBestEffort,
           }
-        : selectedDeliveryMode === "none"
-          ? ({ mode: "none" } as const)
-          : undefined;
+        : selectedDeliveryMode === "webhook"
+          ? {
+              mode: selectedDeliveryMode,
+              to: form.deliveryTo.trim() || undefined,
+              bestEffort: form.deliveryBestEffort,
+            }
+          : selectedDeliveryMode === "agent" || selectedDeliveryMode === "none"
+            ? ({ mode: selectedDeliveryMode } as const)
+            : undefined;
     const failureAlert = buildFailureAlert(form);
     const agentId = form.clearAgent ? null : form.agentId.trim();
     const sessionKeyRaw = form.sessionKey.trim();

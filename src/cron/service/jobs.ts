@@ -189,8 +189,8 @@ function assertMainSessionAgentId(
 }
 
 function assertDeliverySupport(job: Pick<CronJob, "sessionTarget" | "delivery">) {
-  // No delivery object or mode is "none" -- nothing to validate.
-  if (!job.delivery || job.delivery.mode === "none") {
+  // No delivery object or mode is "none"/"agent" -- nothing to validate.
+  if (!job.delivery || job.delivery.mode === "none" || job.delivery.mode === "agent") {
     return;
   }
   // Webhook delivery is allowed for any session target

@@ -77,6 +77,17 @@ describe("cron controller", () => {
     expect(normalized.deliveryMode).toBe("announce");
   });
 
+  it("normalizes legacy none mode to agent for isolated agentTurn jobs", () => {
+    const normalized = normalizeCronFormState({
+      ...DEFAULT_CRON_FORM,
+      sessionTarget: "isolated",
+      payloadKind: "agentTurn",
+      deliveryMode: "none",
+    });
+
+    expect(normalized.deliveryMode).toBe("agent");
+  });
+
   it("forwards webhook delivery in cron.add payload", async () => {
     const request = vi.fn(async (method: string, _payload?: unknown) => {
       if (method === "cron.add") {
@@ -197,7 +208,7 @@ describe("cron controller", () => {
     });
   });
 
-  it('sends delivery: { mode: "none" } explicitly in cron.add payload', async () => {
+  it('normalizes delivery: { mode: "none" } to { mode: "agent" } in cron.add payload for isolated agent turns', async () => {
     const request = vi.fn(async (method: string, _payload?: unknown) => {
       if (method === "cron.add") {
         return { id: "job-none-add" };
@@ -234,11 +245,11 @@ describe("cron controller", () => {
     const addCall = request.mock.calls.find(([method]) => method === "cron.add");
     expect(addCall).toBeDefined();
     expect((addCall?.[1] as { delivery?: unknown } | undefined)?.delivery).toEqual({
-      mode: "none",
+      mode: "agent",
     });
   });
 
-  it('sends delivery: { mode: "none" } explicitly in cron.update patch', async () => {
+  it('normalizes delivery: { mode: "none" } to { mode: "agent" } in cron.update patch for isolated agent turns', async () => {
     const request = vi.fn(async (method: string, _payload?: unknown) => {
       if (method === "cron.update") {
         return { id: "job-none-update" };
@@ -278,7 +289,7 @@ describe("cron controller", () => {
     expect(
       (updateCall?.[1] as { patch?: { delivery?: unknown } } | undefined)?.patch?.delivery,
     ).toEqual({
-      mode: "none",
+      mode: "agent",
     });
   });
 
