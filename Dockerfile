@@ -252,6 +252,10 @@ RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,shar
 RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw \
  && chmod 755 /app/openclaw.mjs
 
+# Expose @decisional/cli so `decisional` commands work inside the container.
+# The CLI reads DECISIONAL_TOKEN from the environment automatically.
+RUN ln -sf /app/node_modules/.bin/decisional /usr/local/bin/decisional 2>/dev/null || true
+
 ENV NODE_ENV=production
 
 # Security hardening: Run as non-root user
