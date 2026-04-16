@@ -37,11 +37,13 @@ export function resolveCronDeliveryPlan(job: CronJob): CronDeliveryPlan {
       ? "announce"
       : normalizedMode === "webhook"
         ? "webhook"
-        : normalizedMode === "none"
-          ? "none"
-          : normalizedMode === "deliver"
-            ? "announce"
-            : undefined;
+        : normalizedMode === "agent"
+          ? "agent"
+          : normalizedMode === "none"
+            ? "none"
+            : normalizedMode === "deliver"
+              ? "announce"
+              : undefined;
 
   const deliveryChannel = normalizeChannel(
     (delivery as { channel?: unknown } | undefined)?.channel,
@@ -184,7 +186,7 @@ function isSameDeliveryTarget(
   failurePlan: CronFailureDeliveryPlan,
 ): boolean {
   const primaryMode = delivery.mode ?? "announce";
-  if (primaryMode === "none") {
+  if (primaryMode === "none" || primaryMode === "agent") {
     return false;
   }
 

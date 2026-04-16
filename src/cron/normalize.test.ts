@@ -344,6 +344,24 @@ describe("normalizeCronJobCreate", () => {
     expect(delivery.to).toBe("https://example.invalid/cron");
   });
 
+  it("normalizes explicit agent delivery mode", () => {
+    const normalized = normalizeCronJobCreate({
+      name: "agent delivery",
+      enabled: true,
+      schedule: { kind: "every", everyMs: 60_000 },
+      sessionTarget: "isolated",
+      wakeMode: "now",
+      payload: { kind: "agentTurn", message: "hello" },
+      delivery: {
+        mode: " AgEnT ",
+      },
+    }) as unknown as Record<string, unknown>;
+
+    const delivery = normalized.delivery as Record<string, unknown>;
+    expect(delivery.mode).toBe("agent");
+    expect(validateCronAddParams(normalized)).toBe(true);
+  });
+
   it("does not default explicit mode-less delivery objects to announce", () => {
     const normalized = normalizeCronJobCreate({
       name: "implicit announce",

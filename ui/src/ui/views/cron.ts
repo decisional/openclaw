@@ -376,8 +376,22 @@ export function renderCron(props: CronProps) {
   const deliverySummary = summarizeSelection(selectedDeliveryLabels, t("cron.runs.allDelivery"));
   const supportsAnnounce =
     props.form.sessionTarget !== "main" && props.form.payloadKind === "agentTurn";
-  const selectedDeliveryMode =
-    props.form.deliveryMode === "announce" && !supportsAnnounce ? "none" : props.form.deliveryMode;
+  const selectedDeliveryMode = supportsAnnounce
+    ? props.form.deliveryMode === "none"
+      ? "agent"
+      : props.form.deliveryMode
+    : props.form.deliveryMode === "announce" || props.form.deliveryMode === "agent"
+      ? "none"
+      : props.form.deliveryMode;
+  const showsDeliveryFields =
+    selectedDeliveryMode === "announce" || selectedDeliveryMode === "webhook";
+  const internalDeliveryModeLabel = supportsAnnounce
+    ? "Agent wake-up"
+    : t("cron.form.noneInternal");
+  const internalDeliveryModeValue = supportsAnnounce ? "agent" : "none";
+  const deliveryHelp = supportsAnnounce
+    ? "Agent wake-up starts a fresh agent run with normal tools. Announce posts a summary to chat."
+    : t("cron.form.deliveryHelp");
   const blockingFields = collectBlockingFields(props.fieldErrors, props.form, selectedDeliveryMode);
   const blockedByValidation = !props.busy && blockingFields.length > 0;
   const hasActiveJobsFilters =
@@ -898,7 +912,7 @@ export function renderCron(props: CronProps) {
             <div class="cron-form-section__title">${t("cron.form.deliverySection")}</div>
             <div class="cron-form-section__sub">${t("cron.form.deliverySub")}</div>
             <div class="form-grid cron-form-grid">
-              <label class="field ${selectedDeliveryMode === "none" ? "cron-span-2" : ""}">
+              <label class="field ${showsDeliveryFields ? "" : "cron-span-2"}">
                 ${renderFieldLabel(t("cron.form.resultDelivery"))}
                 <select
                   id="cron-delivery-mode"
@@ -913,11 +927,11 @@ export function renderCron(props: CronProps) {
                     ? html` <option value="announce">${t("cron.form.announceDefault")}</option> `
                     : nothing}
                   <option value="webhook">${t("cron.form.webhookPost")}</option>
-                  <option value="none">${t("cron.form.noneInternal")}</option>
+                  <option value=${internalDeliveryModeValue}>${internalDeliveryModeLabel}</option>
                 </select>
-                <div class="cron-help">${t("cron.form.deliveryHelp")}</div>
+                <div class="cron-help">${deliveryHelp}</div>
               </label>
-              ${selectedDeliveryMode !== "none"
+              ${showsDeliveryFields
                 ? html`
                     <label class="field ${selectedDeliveryMode === "webhook" ? "cron-span-2" : ""}">
                       ${renderFieldLabel(
@@ -1286,7 +1300,7 @@ export function renderCron(props: CronProps) {
                       : nothing}
                   `
                 : nothing}
-              ${selectedDeliveryMode !== "none"
+              ${showsDeliveryFields
                 ? html`
                     <label class="field checkbox cron-checkbox cron-span-2">
                       <input

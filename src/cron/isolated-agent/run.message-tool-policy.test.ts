@@ -39,7 +39,7 @@ describe("runCronIsolatedAgentTurn message tool policy", () => {
     sourceSessionKey?: string;
     plan: {
       requested: boolean;
-      mode: "none" | "announce";
+      mode: "none" | "agent" | "announce";
       channel?: string;
       to?: string;
     };
@@ -76,7 +76,17 @@ describe("runCronIsolatedAgentTurn message tool policy", () => {
     restoreFastTestEnv(previousFastTestEnv);
   });
 
-  it('keeps the message tool enabled when delivery.mode is "none"', async () => {
+  it('keeps the message tool enabled when delivery.mode is "agent"', async () => {
+    await expectMessageToolStateForPlan({
+      expectedDisabled: false,
+      plan: {
+        requested: false,
+        mode: "agent",
+      },
+    });
+  });
+
+  it('keeps the message tool enabled when delivery.mode is legacy "none"', async () => {
     await expectMessageToolStateForPlan({
       expectedDisabled: false,
       plan: {
@@ -109,10 +119,10 @@ describe("runCronIsolatedAgentTurn message tool policy", () => {
     });
 
     expect(runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.prompt).toContain(
-      'call sessions_history for that session',
+      "call sessions_history for that session",
     );
     expect(runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.prompt).toContain(
-      'agent:main:slack:channel:c123:thread:456',
+      "agent:main:slack:channel:c123:thread:456",
     );
   });
 

@@ -233,8 +233,10 @@ extension CronSettings {
                                         StatusPill(text: channel, tint: .secondary)
                                     }
                                     if let to = delivery.to, !to.isEmpty { StatusPill(text: to, tint: .secondary) }
+                                } else if delivery.mode == .agent || delivery.mode == .none {
+                                    StatusPill(text: "agent wake-up", tint: .secondary)
                                 } else {
-                                    StatusPill(text: "no delivery", tint: .secondary)
+                                    StatusPill(text: delivery.mode.rawValue, tint: .secondary)
                                 }
                             }
                         }

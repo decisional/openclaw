@@ -26,7 +26,7 @@ const CRON_ACTIONS = ["status", "list", "add", "update", "remove", "run", "runs"
 const CRON_SCHEDULE_KINDS = ["at", "every", "cron"] as const;
 const CRON_WAKE_MODES = ["now", "next-heartbeat"] as const;
 const CRON_PAYLOAD_KINDS = ["systemEvent", "agentTurn"] as const;
-const CRON_DELIVERY_MODES = ["none", "announce", "webhook"] as const;
+const CRON_DELIVERY_MODES = ["none", "agent", "announce", "webhook"] as const;
 const CRON_RUN_MODES = ["due", "force"] as const;
 const CRON_FLAT_PAYLOAD_KEYS = [
   "message",
@@ -442,11 +442,12 @@ PAYLOAD TYPES (payload.kind):
   { "kind": "agentTurn", "message": "<prompt>", "model": "<optional>", "thinking": "<optional>", "timeoutSeconds": <optional, 0 means no timeout> }
 
 DELIVERY (top-level):
-  { "mode": "none|announce|webhook", "channel": "<optional>", "to": "<optional>", "bestEffort": <optional-bool> }
+  { "mode": "none|agent|announce|webhook", "channel": "<optional>", "to": "<optional>", "bestEffort": <optional-bool> }
   - Default for isolated agentTurn jobs (when delivery omitted): "announce"
+  - agent: treat cron as a wake trigger, start a fresh agent run, and let that run use normal tools
   - announce: send to chat channel (optional channel/to target)
   - webhook: send finished-run event as HTTP POST to delivery.to (URL required)
-  - mode="none": treat cron as a wake trigger and let the fresh agent session use normal tools, including message when needed.
+  - mode="none": legacy alias for agent
   - If you want the runner itself to post the result back, use announce delivery.channel/to instead of having the run send its own summary.
 
 CRITICAL CONSTRAINTS:

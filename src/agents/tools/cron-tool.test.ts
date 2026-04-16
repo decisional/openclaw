@@ -532,6 +532,16 @@ describe("cron tool", () => {
     expect(delivery).toEqual({ mode: "none" });
   });
 
+  it("preserves explicit agent delivery mode", async () => {
+    callGatewayMock.mockResolvedValueOnce({ ok: true });
+    const delivery = await executeAddAndReadDelivery({
+      callId: "call-agent",
+      agentSessionKey: "agent:main:discord:dm:buddy",
+      delivery: { mode: "agent" },
+    });
+    expect(delivery).toEqual({ mode: "agent" });
+  });
+
   it("preserves explicit mode-less delivery objects for add", async () => {
     callGatewayMock.mockResolvedValueOnce({ ok: true });
 
