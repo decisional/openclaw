@@ -528,7 +528,7 @@ export type CronPayload =
     };
 
 export type CronDelivery = {
-  mode: "none" | "announce" | "webhook";
+  mode: "none" | "agent" | "announce" | "webhook";
   channel?: string;
   to?: string;
   accountId?: string;

@@ -34,17 +34,30 @@ function makeParams() {
 describe("runCronIsolatedAgentTurn message tool policy", () => {
   let previousFastTestEnv: string | undefined;
 
-  async function expectMessageToolDisabledForPlan(plan: {
-    requested: boolean;
-    mode: "none" | "announce";
-    channel?: string;
-    to?: string;
+  async function expectMessageToolStateForPlan(params: {
+    expectedDisabled: boolean;
+    sourceSessionKey?: string;
+    plan: {
+      requested: boolean;
+      mode: "none" | "agent" | "announce";
+      channel?: string;
+      to?: string;
+    };
   }) {
     mockRunCronFallbackPassthrough();
-    resolveCronDeliveryPlanMock.mockReturnValue(plan);
-    await runCronIsolatedAgentTurn(makeParams());
+    resolveCronDeliveryPlanMock.mockReturnValue(params.plan);
+    const baseParams = makeParams();
+    await runCronIsolatedAgentTurn({
+      ...baseParams,
+      job: {
+        ...baseParams.job,
+        ...(params.sourceSessionKey ? { sessionKey: params.sourceSessionKey } : {}),
+      } as never,
+    });
     expect(runEmbeddedPiAgentMock).toHaveBeenCalledTimes(1);
-    expect(runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.disableMessageTool).toBe(true);
+    expect(runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.disableMessageTool).toBe(
+      params.expectedDisabled,
+    );
   }
 
   beforeEach(() => {
@@ -63,20 +76,54 @@ describe("runCronIsolatedAgentTurn message tool policy", () => {
     restoreFastTestEnv(previousFastTestEnv);
   });
 
-  it('disables the message tool when delivery.mode is "none"', async () => {
-    await expectMessageToolDisabledForPlan({
-      requested: false,
-      mode: "none",
+  it('keeps the message tool enabled when delivery.mode is "agent"', async () => {
+    await expectMessageToolStateForPlan({
+      expectedDisabled: false,
+      plan: {
+        requested: false,
+        mode: "agent",
+      },
+    });
+  });
+
+  it('keeps the message tool enabled when delivery.mode is legacy "none"', async () => {
+    await expectMessageToolStateForPlan({
+      expectedDisabled: false,
+      plan: {
+        requested: false,
+        mode: "none",
+      },
     });
   });
 
   it("disables the message tool when cron delivery is active", async () => {
-    await expectMessageToolDisabledForPlan({
-      requested: true,
-      mode: "announce",
-      channel: "telegram",
-      to: "123",
+    await expectMessageToolStateForPlan({
+      expectedDisabled: true,
+      plan: {
+        requested: true,
+        mode: "announce",
+        channel: "telegram",
+        to: "123",
+      },
     });
+  });
+
+  it("tells isolated cron runs to recover the originating session context first", async () => {
+    await expectMessageToolStateForPlan({
+      expectedDisabled: false,
+      sourceSessionKey: "agent:main:slack:channel:c123:thread:456",
+      plan: {
+        requested: false,
+        mode: "none",
+      },
+    });
+
+    expect(runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.prompt).toContain(
+      "call sessions_history for that session",
+    );
+    expect(runEmbeddedPiAgentMock.mock.calls[0]?.[0]?.prompt).toContain(
+      "agent:main:slack:channel:c123:thread:456",
+    );
   });
 
   it("keeps the message tool enabled for shared callers when delivery is not requested", async () => {

@@ -53,7 +53,7 @@ extension CronJobEditor {
         }
 
         if let delivery = job.delivery {
-            self.deliveryMode = delivery.mode == .announce ? .announce : .none
+            self.deliveryMode = delivery.mode == .announce ? .announce : .agent
             let trimmed = (delivery.channel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             self.channel = trimmed.isEmpty ? "last" : trimmed
             self.to = delivery.to ?? ""
@@ -107,7 +107,7 @@ extension CronJobEditor {
     }
 
     func buildDelivery() -> [String: Any] {
-        let mode = self.deliveryMode == .announce ? "announce" : "none"
+        let mode = self.deliveryMode == .announce ? "announce" : "agent"
         var delivery: [String: Any] = ["mode": mode]
         if self.deliveryMode == .announce {
             let trimmed = self.channel.trimmingCharacters(in: .whitespacesAndNewlines)

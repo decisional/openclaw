@@ -19,7 +19,7 @@ export type CronWakeMode = "next-heartbeat" | "now";
 
 export type CronMessageChannel = ChannelId;
 
-export type CronDeliveryMode = "none" | "announce" | "webhook";
+export type CronDeliveryMode = "none" | "agent" | "announce" | "webhook";
 
 export type CronDelivery = {
   mode: CronDeliveryMode;

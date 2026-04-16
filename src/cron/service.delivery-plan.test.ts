@@ -10,7 +10,7 @@ import {
 const noopLogger = createNoopLogger();
 const { makeStorePath } = createCronStoreHarness({ prefix: "openclaw-cron-delivery-" });
 
-type DeliveryMode = "none" | "announce";
+type DeliveryMode = "none" | "agent" | "announce";
 
 type DeliveryOverride = {
   mode: DeliveryMode;
@@ -76,6 +76,20 @@ describe("CronService delivery plan consistency", () => {
         name: "delivery-off",
         wakeMode: "next-heartbeat",
         delivery: { mode: "none" },
+      });
+
+      const result = await cron.run(job.id, "force");
+      expect(result).toEqual({ ok: true, ran: true });
+      expect(enqueueSystemEvent).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does not post isolated summary when delivery.mode=agent", async () => {
+    await withCronService({}, async ({ cron, enqueueSystemEvent }) => {
+      const job = await addIsolatedAgentTurnJob(cron, {
+        name: "delivery-agent",
+        wakeMode: "next-heartbeat",
+        delivery: { mode: "agent" },
       });
 
       const result = await cron.run(job.id, "force");
