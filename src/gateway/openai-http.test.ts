@@ -904,6 +904,72 @@ describe("OpenAI-compatible HTTP API (e2e)", () => {
     }
   });
 
+  it("returns structured OpenClaw debug metadata for sync compat turns", async () => {
+    const port = await getFreePort();
+    const server = await startTokenServer(port);
+    try {
+      agentCommand.mockClear();
+      agentCommand.mockImplementationOnce(async (opts: { runId?: string }) => {
+        const runId = opts.runId ?? "missing-run-id";
+        emitAgentEvent({
+          runId,
+          stream: "thinking",
+          data: { text: "Inspecting the failed node", delta: "Inspecting the failed node" },
+        });
+        emitAgentEvent({
+          runId,
+          stream: "plan",
+          data: { phase: "update", title: "Retry the failed node" },
+        });
+        emitAgentEvent({
+          runId,
+          stream: "item",
+          data: {
+            itemId: "item-1",
+            phase: "end",
+            kind: "tool",
+            title: "Retry node execution",
+            status: "completed",
+            summary: "Queued the retry with patched code",
+          },
+        });
+        return {
+          payloads: [{ text: "Queued retry." }],
+          meta: { agentMeta: { usage: { input: 1, output: 2, total: 3 } } },
+        } as never;
+      });
+
+      const res = await postChatCompletions(
+        port,
+        {
+          model: "openclaw",
+          messages: [{ role: "user", content: "fix the run" }],
+        },
+        {
+          authorization: "Bearer secret",
+          "x-openclaw-work-context": "ws_1:run_fixer:abc",
+        },
+      );
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as Record<string, unknown>;
+      const debug = (json.openclaw as Record<string, unknown> | undefined) ?? {};
+
+      expect(debug.work_context_id).toBe("ws_1:run_fixer:abc");
+      expect(typeof debug.session_key).toBe("string");
+      expect(debug.turn_id).toBe(json.id);
+      expect(debug.thoughts).toBe("Inspecting the failed node");
+      expect(debug.plan_titles).toEqual(["Retry the failed node"]);
+      expect(debug.items).toEqual([
+        expect.objectContaining({
+          title: "Retry node execution",
+          summary: "Queued the retry with patched code",
+        }),
+      ]);
+    } finally {
+      await server.close({ reason: "openai compat debug metadata test done" });
+    }
+  });
+
   it("returns 429 for repeated failed auth when gateway.auth.rateLimit is configured", async () => {
     testState.gatewayAuth = {
       mode: "token",
