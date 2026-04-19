@@ -107,6 +107,23 @@ const OPENCLAW_COMPAT_DEBUG_MAX_PLAN_TITLES = 12;
 const OPENCLAW_COMPAT_DEBUG_MAX_ITEMS = 16;
 const OPENCLAW_COMPAT_DEBUG_MAX_ERRORS = 8;
 
+function truncateUtf8ToByteLimit(value: string, byteLimit: number): string {
+  if (!value || byteLimit <= 0) {
+    return "";
+  }
+  let usedBytes = 0;
+  const parts: string[] = [];
+  for (const char of value) {
+    const charBytes = Buffer.byteLength(char, "utf8");
+    if (usedBytes + charBytes > byteLimit) {
+      break;
+    }
+    parts.push(char);
+    usedBytes += charBytes;
+  }
+  return parts.join("");
+}
+
 function resolveOpenAiChatCompletionsLimits(
   config: GatewayHttpChatCompletionsConfig | undefined,
 ): ResolvedOpenAiChatCompletionsLimits {
@@ -169,7 +186,7 @@ function createOpenClawCompatDebugCollector(params: {
     }
     const remainingBytes = OPENCLAW_COMPAT_DEBUG_MAX_THOUGHT_BYTES - Buffer.byteLength(thoughts, "utf8");
     if (remainingBytes > 0) {
-      const truncated = Buffer.from(value, "utf8").subarray(0, remainingBytes).toString("utf8");
+      const truncated = truncateUtf8ToByteLimit(value, remainingBytes);
       thoughts += truncated;
     }
     thoughtsTruncated = true;
@@ -786,6 +803,7 @@ export async function handleOpenAiHttpRequest(
       logWarn(`openai-compat: chat completion failed: ${String(err)}`);
       sendJson(res, 500, {
         error: { message: "internal error", type: "api_error" },
+        openclaw: debugCollector.snapshot(),
       });
     } finally {
       unsubscribe();
