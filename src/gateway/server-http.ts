@@ -91,6 +91,7 @@ let sessionHistoryHttpModulePromise:
   | undefined;
 let sessionKillHttpModulePromise: Promise<typeof import("./session-kill-http.js")> | undefined;
 let toolsInvokeHttpModulePromise: Promise<typeof import("./tools-invoke-http.js")> | undefined;
+let workJobsHttpModulePromise: Promise<typeof import("./work-jobs/index.js")> | undefined;
 
 function getBundledChannelsModule() {
   bundledChannelsModulePromise ??= import("../channels/plugins/bundled.js");
@@ -140,6 +141,11 @@ function getSessionKillHttpModule() {
 function getToolsInvokeHttpModule() {
   toolsInvokeHttpModulePromise ??= import("./tools-invoke-http.js");
   return toolsInvokeHttpModulePromise;
+}
+
+function getWorkJobsHttpModule() {
+  workJobsHttpModulePromise ??= import("./work-jobs/index.js");
+  return workJobsHttpModulePromise;
 }
 
 type HookDispatchers = {
@@ -223,6 +229,10 @@ function isOpenResponsesPath(pathname: string): boolean {
 
 function isToolsInvokePath(pathname: string): boolean {
   return pathname === "/tools/invoke";
+}
+
+function isWorkJobsPath(pathname: string): boolean {
+  return pathname === "/v1/openclaw/work" || pathname.startsWith("/v1/openclaw/work/");
 }
 
 function isSessionKillPath(pathname: string): boolean {
@@ -939,6 +949,22 @@ export function createGatewayHttpServer(opts: {
               allowRealIpFallback,
               rateLimiter,
             }),
+        });
+      }
+      if (isWorkJobsPath(requestPath)) {
+        requestStages.push({
+          name: "work-jobs",
+          run: async () => {
+            const mod = await getWorkJobsHttpModule();
+            const { getWorkJobWorker } = await import("./work-jobs/runtime.js");
+            return mod.handleWorkJobsHttpRequest(req, res, {
+              auth: resolvedAuth,
+              worker: getWorkJobWorker(),
+              trustedProxies,
+              allowRealIpFallback,
+              rateLimiter,
+            });
+          },
         });
       }
       if (isSessionKillPath(requestPath)) {
