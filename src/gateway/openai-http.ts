@@ -83,6 +83,47 @@ type ResolvedOpenAiChatCompletionsLimits = {
   images: InputImageLimits;
 };
 
+type OpenClawCompatDebugItem = {
+  kind?: string;
+  title?: string;
+  status?: string;
+  summary?: string;
+  error?: string;
+};
+
+type OpenClawCompatDebugPayload = {
+  session_key: string;
+  work_context_id?: string;
+  turn_id: string;
+  thoughts?: string;
+  thoughts_truncated?: boolean;
+  plan_titles?: string[];
+  items?: OpenClawCompatDebugItem[];
+  errors?: string[];
+};
+
+const OPENCLAW_COMPAT_DEBUG_MAX_THOUGHT_BYTES = 64_000;
+const OPENCLAW_COMPAT_DEBUG_MAX_PLAN_TITLES = 12;
+const OPENCLAW_COMPAT_DEBUG_MAX_ITEMS = 16;
+const OPENCLAW_COMPAT_DEBUG_MAX_ERRORS = 8;
+
+function truncateUtf8ToByteLimit(value: string, byteLimit: number): string {
+  if (!value || byteLimit <= 0) {
+    return "";
+  }
+  let usedBytes = 0;
+  const parts: string[] = [];
+  for (const char of value) {
+    const charBytes = Buffer.byteLength(char, "utf8");
+    if (usedBytes + charBytes > byteLimit) {
+      break;
+    }
+    parts.push(char);
+    usedBytes += charBytes;
+  }
+  return parts.join("");
+}
+
 function resolveOpenAiChatCompletionsLimits(
   config: GatewayHttpChatCompletionsConfig | undefined,
 ): ResolvedOpenAiChatCompletionsLimits {
@@ -121,6 +162,110 @@ function setCompatContinuityHeaders(
   }
   res.setHeader("x-openclaw-session-key", params.sessionKey);
   res.setHeader("x-openclaw-work-context", params.workContextId);
+}
+
+function createOpenClawCompatDebugCollector(params: {
+  sessionKey: string;
+  workContextId?: string;
+  turnId: string;
+}) {
+  let thoughts = "";
+  let thoughtsTruncated = false;
+  const planTitles: string[] = [];
+  const items: OpenClawCompatDebugItem[] = [];
+  const errors: string[] = [];
+
+  const appendThought = (value: string) => {
+    if (!value || thoughtsTruncated) {
+      return;
+    }
+    const next = thoughts + value;
+    if (Buffer.byteLength(next, "utf8") <= OPENCLAW_COMPAT_DEBUG_MAX_THOUGHT_BYTES) {
+      thoughts = next;
+      return;
+    }
+    const remainingBytes = OPENCLAW_COMPAT_DEBUG_MAX_THOUGHT_BYTES - Buffer.byteLength(thoughts, "utf8");
+    if (remainingBytes > 0) {
+      const truncated = truncateUtf8ToByteLimit(value, remainingBytes);
+      thoughts += truncated;
+    }
+    thoughtsTruncated = true;
+  };
+
+  return {
+    onEvent(evt: { stream: string; data?: Record<string, unknown> }) {
+      const data = evt.data ?? {};
+      if (evt.stream === "thinking") {
+        const delta = typeof data.delta === "string" ? data.delta : "";
+        const text = typeof data.text === "string" ? data.text : "";
+        if (delta) {
+          appendThought(delta);
+          return;
+        }
+        if (!thoughts && text) {
+          appendThought(text);
+        }
+        return;
+      }
+
+      if (evt.stream === "plan") {
+        if (planTitles.length >= OPENCLAW_COMPAT_DEBUG_MAX_PLAN_TITLES) {
+          return;
+        }
+        const title = typeof data.title === "string" ? data.title.trim() : "";
+        if (title) {
+          planTitles.push(title);
+        }
+        return;
+      }
+
+      if (evt.stream === "item") {
+        if (items.length >= OPENCLAW_COMPAT_DEBUG_MAX_ITEMS) {
+          return;
+        }
+        const title = typeof data.title === "string" ? data.title.trim() : "";
+        const kind = typeof data.kind === "string" ? data.kind.trim() : "";
+        const status = typeof data.status === "string" ? data.status.trim() : "";
+        const summary = typeof data.summary === "string" ? data.summary.trim() : "";
+        const error = typeof data.error === "string" ? data.error.trim() : "";
+        if (!title && !kind && !status && !summary && !error) {
+          return;
+        }
+        items.push({
+          ...(kind ? { kind } : {}),
+          ...(title ? { title } : {}),
+          ...(status ? { status } : {}),
+          ...(summary ? { summary } : {}),
+          ...(error ? { error } : {}),
+        });
+        return;
+      }
+
+      if (evt.stream === "error") {
+        if (errors.length >= OPENCLAW_COMPAT_DEBUG_MAX_ERRORS) {
+          return;
+        }
+        const errorText = typeof data.error === "string" ? data.error.trim() : "";
+        const message = typeof data.message === "string" ? data.message.trim() : "";
+        const next = errorText || message;
+        if (next) {
+          errors.push(next);
+        }
+      }
+    },
+    snapshot(): OpenClawCompatDebugPayload {
+      return {
+        session_key: params.sessionKey,
+        ...(params.workContextId ? { work_context_id: params.workContextId } : {}),
+        turn_id: params.turnId,
+        ...(thoughts ? { thoughts } : {}),
+        ...(thoughtsTruncated ? { thoughts_truncated: true } : {}),
+        ...(planTitles.length > 0 ? { plan_titles: planTitles } : {}),
+        ...(items.length > 0 ? { items } : {}),
+        ...(errors.length > 0 ? { errors } : {}),
+      };
+    },
+  };
 }
 
 function buildAgentCommandInput(params: {
@@ -614,6 +759,17 @@ export async function handleOpenAiHttpRequest(
 
   if (!stream) {
     const stopWatchingDisconnect = watchClientDisconnect(req, res, abortController);
+    const debugCollector = createOpenClawCompatDebugCollector({
+      sessionKey,
+      workContextId,
+      turnId: runId,
+    });
+    const unsubscribe = onAgentEvent((evt) => {
+      if (evt.runId !== runId) {
+        return;
+      }
+      debugCollector.onEvent(evt);
+    });
     try {
       const result = await agentCommandFromIngress(commandInput, defaultRuntime, deps);
 
@@ -638,6 +794,7 @@ export async function handleOpenAiHttpRequest(
           },
         ],
         usage,
+        openclaw: debugCollector.snapshot(),
       });
     } catch (err) {
       if (abortController.signal.aborted) {
@@ -646,8 +803,10 @@ export async function handleOpenAiHttpRequest(
       logWarn(`openai-compat: chat completion failed: ${String(err)}`);
       sendJson(res, 500, {
         error: { message: "internal error", type: "api_error" },
+        openclaw: debugCollector.snapshot(),
       });
     } finally {
+      unsubscribe();
       stopWatchingDisconnect();
     }
     return true;
