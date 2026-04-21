@@ -1623,6 +1623,7 @@ export function createExecTool(
           workdir,
           env,
           requestedEnv: params.env,
+          hiddenEnv,
           requestedNode: params.node?.trim(),
           boundNode: defaults?.node?.trim(),
           sessionKey: defaults?.sessionKey,

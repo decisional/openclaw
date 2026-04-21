@@ -38,6 +38,20 @@ function normalizeValue(value: string | undefined | null): string {
   return normalizeOptionalString(value) ?? "";
 }
 
+function normalizeHiddenEnv(
+  hiddenEnv: Record<string, string> | undefined | null,
+): Record<string, string> | undefined {
+  if (!hiddenEnv || typeof hiddenEnv !== "object") {
+    return undefined;
+  }
+  const normalized = Object.fromEntries(
+    Object.entries(hiddenEnv)
+      .map(([key, value]) => [normalizeValue(key), normalizeValue(value)] as const)
+      .filter(([key, value]) => key && value),
+  );
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function isTerminal(state: WorkJobState): boolean {
   return state === "completed" || state === "failed" || state === "cancelled";
 }
@@ -104,6 +118,14 @@ function loadIntoMemory(): void {
       ...job,
       workContextId,
       jobId,
+      inputs: {
+        userMessage: normalizeValue(job.inputs?.userMessage),
+        systemPrompt: normalizeValue(job.inputs?.systemPrompt) || undefined,
+        messageChannel: normalizeValue(job.inputs?.messageChannel) || undefined,
+        model: normalizeValue(job.inputs?.model) || undefined,
+        sessionKey: normalizeValue(job.inputs?.sessionKey) || undefined,
+        hiddenEnv: normalizeHiddenEnv(job.inputs?.hiddenEnv),
+      },
       state: job.state ?? "queued",
       attempts: typeof job.attempts === "number" && Number.isFinite(job.attempts) ? job.attempts : 0,
       createdAt: typeof job.createdAt === "number" ? job.createdAt : Date.now(),
@@ -172,6 +194,7 @@ export function ensureJob(params: {
       messageChannel: normalizeValue(params.inputs.messageChannel) || undefined,
       model: normalizeValue(params.inputs.model) || undefined,
       sessionKey: normalizeValue(params.inputs.sessionKey) || undefined,
+      hiddenEnv: normalizeHiddenEnv(params.inputs.hiddenEnv),
     },
     createdAt: now,
     updatedAt: now,
