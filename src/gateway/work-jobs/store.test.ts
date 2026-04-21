@@ -60,6 +60,27 @@ describe("work-jobs store", () => {
     expect(second.inputs.userMessage).toBe("hi"); // unchanged
   });
 
+  it("persists hiddenEnv across reload for scoped work credentials", async () => {
+    const created = ensureJob({
+      workContextId: "ws:a:approval:hidden-env",
+      inputs: {
+        userMessage: "hi",
+        hiddenEnv: {
+          DECISIONAL_TOKEN: "dex_scoped",
+          EMPTY: "   ",
+        },
+      },
+    });
+    expect(created.inputs.hiddenEnv).toEqual({ DECISIONAL_TOKEN: "dex_scoped" });
+
+    await __testing.flushPersistForTests();
+    const customPath = path.join(tempDir, "work-jobs.json");
+    __testing.reset({ customPath });
+
+    const reloaded = getJobByWorkContext("ws:a:approval:hidden-env");
+    expect(reloaded?.inputs.hiddenEnv).toEqual({ DECISIONAL_TOKEN: "dex_scoped" });
+  });
+
   it("rejects missing user_message", () => {
     expect(() =>
       ensureJob({ workContextId: "ws:a:approval:3", inputs: { userMessage: "" } }),

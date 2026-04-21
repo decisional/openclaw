@@ -289,6 +289,7 @@ export function runAgentAttempt(params: {
     internalEvents: params.opts.internalEvents,
     inputProvenance: params.opts.inputProvenance,
     streamParams: params.opts.streamParams,
+    hiddenEnv: params.opts.hiddenEnv,
     agentDir: params.agentDir,
     allowTransientCooldownProbe: params.allowTransientCooldownProbe,
     cleanupBundleMcpOnRunEnd: params.opts.cleanupBundleMcpOnRunEnd,

@@ -12,6 +12,11 @@ import {
 import { logInfo } from "../logger.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import {
+  DECISIONAL_TOKEN_ENV_KEY,
+  findDisallowedHiddenEnvKeys,
+  getAllowedHiddenEnvKeys,
+} from "../shared/hidden-env.js";
+import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalLowercaseString,
   normalizeOptionalString,
@@ -187,6 +192,19 @@ function stripPreflightEnvPrefix(argv: string[]): string[] {
     }
   }
   return argv.slice(idx);
+}
+
+function shouldScrubInheritedDecisionalToken(hiddenEnv: Record<string, string>): boolean {
+  return Object.prototype.hasOwnProperty.call(hiddenEnv, DECISIONAL_TOKEN_ENV_KEY);
+}
+
+function buildLoginShellProbeEnv(scrubDecisionalToken: boolean): NodeJS.ProcessEnv {
+  if (!scrubDecisionalToken) {
+    return process.env;
+  }
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  delete env[DECISIONAL_TOKEN_ENV_KEY];
+  return env;
 }
 
 function findFirstPythonScriptArg(tokens: string[]): string | null {
@@ -1506,7 +1524,32 @@ export function createExecTool(
       }
       rejectExecApprovalShellCommand(params.command);
 
+      const hiddenEnv = coerceEnv(defaults?.hiddenEnv);
+      const invalidHiddenEnvKeys = findDisallowedHiddenEnvKeys(hiddenEnv);
+      if (invalidHiddenEnvKeys.length > 0) {
+        throw new Error(
+          `Security Violation: hidden env key(s) are not allowed: ${invalidHiddenEnvKeys.join(", ")}. Allowed keys: ${getAllowedHiddenEnvKeys().join(", ")}.`,
+        );
+      }
+      const scrubInheritedDecisionalToken = shouldScrubInheritedDecisionalToken(hiddenEnv);
       const inheritedBaseEnv = coerceEnv(process.env);
+      if (scrubInheritedDecisionalToken) {
+        // Restricted sessions inject a scoped token via hiddenEnv. Strip the
+        // ambient baseline token from inherited child env so helper subprocesses
+        // and the spawned shell cannot fall back to the broader credential.
+        delete inheritedBaseEnv[DECISIONAL_TOKEN_ENV_KEY];
+      }
+      const hiddenEnvKeys = Object.keys(hiddenEnv);
+      if (
+        params.env &&
+        hiddenEnvKeys.some((key) => Object.prototype.hasOwnProperty.call(params.env, key))
+      ) {
+        throw new Error(
+          `Security Violation: Environment variable override is not allowed for reserved key(s): ${hiddenEnvKeys
+            .filter((key) => Object.prototype.hasOwnProperty.call(params.env, key))
+            .join(", ")}.`,
+        );
+      }
       const hostEnvResult =
         host === "sandbox"
           ? null
@@ -1561,9 +1604,10 @@ export function createExecTool(
           : (hostEnvResult?.env ?? inheritedBaseEnv);
 
       if (!sandbox && host === "gateway" && !params.env?.PATH) {
+        const shellPathProbeEnv = buildLoginShellProbeEnv(scrubInheritedDecisionalToken);
         const shellPath = getShellPathFromLoginShell({
-          env: process.env,
-          timeoutMs: resolveShellEnvFallbackTimeoutMs(process.env),
+          env: shellPathProbeEnv,
+          timeoutMs: resolveShellEnvFallbackTimeoutMs(shellPathProbeEnv),
         });
         applyShellPath(env, shellPath);
       }
@@ -1578,12 +1622,17 @@ export function createExecTool(
         applyPathPrepend(env, defaultPathPrepend);
       }
 
+      for (const [key, value] of Object.entries(hiddenEnv)) {
+        env[key] = value;
+      }
+
       if (host === "node") {
         return executeNodeHostCommand({
           command: params.command,
           workdir,
           env,
           requestedEnv: params.env,
+          hiddenEnv,
           requestedNode: params.node?.trim(),
           boundNode: defaults?.node?.trim(),
           sessionKey: defaults?.sessionKey,

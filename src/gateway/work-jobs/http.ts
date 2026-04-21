@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { coerceAllowedHiddenEnv } from "../../shared/hidden-env.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import type { AuthRateLimiter } from "../auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "../auth.js";
@@ -30,6 +31,7 @@ type PostRequestBody = {
   model?: unknown;
   session_key?: unknown;
   retry_if_failed?: unknown;
+  hidden_env?: unknown;
 };
 
 function coerceString(value: unknown): string {
@@ -124,6 +126,7 @@ async function handleCreate(
         messageChannel: coerceString(body.message_channel) || undefined,
         model: coerceString(body.model) || undefined,
         sessionKey: coerceString(body.session_key) || undefined,
+        hiddenEnv: coerceAllowedHiddenEnv(body.hidden_env),
       },
     });
   } catch (err) {

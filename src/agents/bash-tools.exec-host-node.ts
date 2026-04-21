@@ -36,6 +36,7 @@ export type ExecuteNodeHostCommandParams = {
   workdir: string | undefined;
   env: Record<string, string>;
   requestedEnv?: Record<string, string>;
+  hiddenEnv?: Record<string, string>;
   requestedNode?: string;
   boundNode?: string;
   sessionKey?: string;
@@ -55,6 +56,20 @@ export type ExecuteNodeHostCommandParams = {
   notifySessionKey?: string;
   trustedSafeBinDirs?: ReadonlySet<string>;
 };
+
+function buildNodeExecEnv(params: {
+  requestedEnv?: Record<string, string>;
+  hiddenEnv?: Record<string, string>;
+}): Record<string, string> | undefined {
+  const env: Record<string, string> = {};
+  if (params.requestedEnv) {
+    Object.assign(env, params.requestedEnv);
+  }
+  if (params.hiddenEnv) {
+    Object.assign(env, params.hiddenEnv);
+  }
+  return Object.keys(env).length > 0 ? env : undefined;
+}
 
 export async function executeNodeHostCommand(
   params: ExecuteNodeHostCommandParams,
@@ -123,7 +138,10 @@ export async function executeNodeHostCommand(
   const runAgentId = prepared.plan.agentId ?? params.agentId;
   const runSessionKey = prepared.plan.sessionKey ?? params.sessionKey;
 
-  const nodeEnv = params.requestedEnv ? { ...params.requestedEnv } : undefined;
+  const nodeEnv = buildNodeExecEnv({
+    requestedEnv: params.requestedEnv,
+    hiddenEnv: params.hiddenEnv,
+  });
   const baseAllowlistEval = evaluateShellAllowlist({
     command: params.command,
     allowlist: [],

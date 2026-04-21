@@ -19,6 +19,7 @@ import {
   type InputImageSource,
 } from "../media/input-files.js";
 import { defaultRuntime } from "../runtime.js";
+import { coerceAllowedHiddenEnv } from "../shared/hidden-env.js";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
@@ -62,6 +63,7 @@ type OpenAiChatCompletionRequest = {
   stream_options?: unknown;
   messages?: unknown;
   user?: unknown;
+  hidden_env?: unknown;
 };
 
 const DEFAULT_OPENAI_CHAT_COMPLETIONS_BODY_BYTES = 20 * 1024 * 1024;
@@ -275,6 +277,7 @@ function buildAgentCommandInput(params: {
   runId: string;
   messageChannel: string;
   senderIsOwner: boolean;
+  hiddenEnv?: Record<string, string>;
   abortSignal?: AbortSignal;
 }) {
   return {
@@ -289,6 +292,7 @@ function buildAgentCommandInput(params: {
     bestEffortDeliver: false as const,
     senderIsOwner: params.senderIsOwner,
     allowModelOverride: true as const,
+    hiddenEnv: params.hiddenEnv,
     abortSignal: params.abortSignal,
   };
 }
@@ -523,6 +527,7 @@ async function resolveImagesForRequest(
 }
 
 export const __testOnlyOpenAiHttp = {
+  buildAgentCommandInput,
   resolveImagesForRequest,
   resolveOpenAiChatCompletionsLimits,
 };
@@ -755,6 +760,7 @@ export async function handleOpenAiHttpRequest(
     messageChannel,
     abortSignal: abortController.signal,
     senderIsOwner,
+    hiddenEnv: coerceAllowedHiddenEnv(payload.hidden_env),
   });
 
   if (!stream) {

@@ -90,7 +90,7 @@ describe("exec PATH login shell merge", () => {
   });
 
   beforeEach(() => {
-    envSnapshot = captureEnv(["PATH", "SHELL"]);
+    envSnapshot = captureEnv(["PATH", "SHELL", "DECISIONAL_TOKEN"]);
     shellEnvMocks.getShellPathFromLoginShell.mockReset();
     shellEnvMocks.getShellPathFromLoginShell.mockReturnValue("/custom/bin:/opt/bin");
     shellEnvMocks.resolveShellEnvFallbackTimeoutMs.mockReset();
@@ -135,6 +135,108 @@ describe("exec PATH login shell merge", () => {
     const value = normalizeText(result.content.find((c) => c.type === "text")?.text);
 
     expect(value).toBe("exec");
+  });
+
+  it("inherits ambient DECISIONAL_TOKEN for normal host=gateway commands", async () => {
+    if (isWin) {
+      return;
+    }
+
+    process.env.DECISIONAL_TOKEN = "dex_full";
+
+    const tool = createExecTool({ host: "gateway", security: "full", ask: "off" });
+    const result = await tool.execute("call-inherited-token", {
+      command: 'printf "%s" "${DECISIONAL_TOKEN:-}"',
+      yieldMs: FOREGROUND_TEST_YIELD_MS,
+    });
+    const value = normalizeText(result.content.find((c) => c.type === "text")?.text);
+
+    expect(value).toBe("dex_full");
+  });
+
+  it("injects hidden env into host=gateway commands", async () => {
+    if (isWin) {
+      return;
+    }
+
+    process.env.DECISIONAL_TOKEN = "dex_full";
+
+    const tool = createExecTool({
+      host: "gateway",
+      security: "full",
+      ask: "off",
+      hiddenEnv: { DECISIONAL_TOKEN: "dex_scoped" },
+    });
+    const result = await tool.execute("call-hidden-env", {
+      command: 'printf "%s" "${DECISIONAL_TOKEN:-}"',
+      yieldMs: FOREGROUND_TEST_YIELD_MS,
+    });
+    const value = normalizeText(result.content.find((c) => c.type === "text")?.text);
+
+    expect(value).toBe("dex_scoped");
+  });
+
+  it("scrubs ambient DECISIONAL_TOKEN from the login-shell PATH probe for restricted sessions", async () => {
+    if (isWin) {
+      return;
+    }
+
+    process.env.PATH = "/usr/bin";
+    process.env.DECISIONAL_TOKEN = "dex_full";
+
+    const shellPathMock = shellEnvMocks.getShellPathFromLoginShell;
+    shellPathMock.mockClear();
+    shellPathMock.mockReturnValue("/custom/bin:/opt/bin");
+
+    const tool = createExecTool({
+      host: "gateway",
+      security: "full",
+      ask: "off",
+      hiddenEnv: { DECISIONAL_TOKEN: "dex_scoped" },
+    });
+    const result = await tool.execute("call-hidden-env-scrubbed-probe", {
+      command: 'printf "%s" "${DECISIONAL_TOKEN:-}"',
+      yieldMs: FOREGROUND_TEST_YIELD_MS,
+    });
+    const value = normalizeText(result.content.find((c) => c.type === "text")?.text);
+    const probeEnv = shellPathMock.mock.calls[0]?.[0]?.env;
+
+    expect(value).toBe("dex_scoped");
+    expect(shellPathMock).toHaveBeenCalledTimes(1);
+    expect(probeEnv?.DECISIONAL_TOKEN).toBeUndefined();
+  });
+
+  it("blocks tool-call env overrides for hidden env keys", async () => {
+    const tool = createExecTool({
+      host: "gateway",
+      security: "full",
+      ask: "off",
+      hiddenEnv: { DECISIONAL_TOKEN: "dex_scoped" },
+    });
+
+    await expect(
+      tool.execute("call-hidden-env-blocked", {
+        command: "echo blocked",
+        env: { DECISIONAL_TOKEN: "dex_full" },
+        yieldMs: FOREGROUND_TEST_YIELD_MS,
+      }),
+    ).rejects.toThrow(/reserved key/);
+  });
+
+  it("rejects hidden env keys outside the allowlist", async () => {
+    const tool = createExecTool({
+      host: "gateway",
+      security: "full",
+      ask: "off",
+      hiddenEnv: { LD_PRELOAD: "/tmp/evil.so" },
+    });
+
+    await expect(
+      tool.execute("call-hidden-env-invalid", {
+        command: "echo blocked",
+        yieldMs: FOREGROUND_TEST_YIELD_MS,
+      }),
+    ).rejects.toThrow(/hidden env key\(s\) are not allowed: LD_PRELOAD/);
   });
 
   it("throws security violation when env.PATH is provided", async () => {

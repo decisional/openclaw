@@ -176,6 +176,7 @@ async function defaultRunJob(
     senderIsOwner: true,
     allowModelOverride: true as const,
     model: job.inputs.model?.trim() || undefined,
+    hiddenEnv: job.inputs.hiddenEnv,
   };
   const raw = (await agentCommandFromIngress(commandInput, runtime, deps)) as {
     payloads?: Array<{ text?: string }>;

@@ -277,6 +277,50 @@ describe("executeNodeHostCommand", () => {
     );
   });
 
+  it("forwards hiddenEnv to node system.run without sending unrelated gateway env", async () => {
+    const result = await executeNodeHostCommand({
+      command: "bun ./script.ts",
+      workdir: "/tmp/work",
+      env: {
+        PATH: "/gateway/path",
+        DECISIONAL_TOKEN: "dex_scoped",
+      },
+      requestedEnv: {
+        KEEP_ME: "requested",
+      },
+      hiddenEnv: {
+        DECISIONAL_TOKEN: "dex_scoped",
+      },
+      security: "full",
+      ask: "off",
+      defaultTimeoutSec: 30,
+      approvalRunningNoticeMs: 0,
+      warnings: [],
+      agentId: "requested-agent",
+      sessionKey: "requested-session",
+    });
+
+    expect(result.details?.status).toBe("approval-pending");
+    await vi.waitFor(() => {
+      expect(callGatewayToolMock).toHaveBeenCalledTimes(2);
+    });
+
+    expect(callGatewayToolMock).toHaveBeenNthCalledWith(
+      2,
+      "node.invoke",
+      expect.anything(),
+      expect.objectContaining({
+        command: "system.run",
+        params: expect.objectContaining({
+          env: {
+            KEEP_ME: "requested",
+            DECISIONAL_TOKEN: "dex_scoped",
+          },
+        }),
+      }),
+    );
+  });
+
   it("denies timed-out inline-eval requests instead of invoking the node", async () => {
     detectInterpreterInlineEvalArgvMock.mockReturnValue(INLINE_EVAL_HIT);
     resolveApprovalDecisionOrUndefinedMock.mockResolvedValue(null);
