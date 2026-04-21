@@ -12,6 +12,11 @@ import {
 import { logInfo } from "../logger.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 import {
+  DECISIONAL_TOKEN_ENV_KEY,
+  findDisallowedHiddenEnvKeys,
+  getAllowedHiddenEnvKeys,
+} from "../shared/hidden-env.js";
+import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalLowercaseString,
   normalizeOptionalString,
@@ -110,8 +115,6 @@ const SKIPPABLE_SCRIPT_PREFLIGHT_FS_ERROR_CODES = new Set([
   "ENOTDIR",
   "EPERM",
 ]);
-
-const DECISIONAL_TOKEN_ENV_KEY = "DECISIONAL_TOKEN";
 
 function getNodeErrorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) {
@@ -1522,6 +1525,12 @@ export function createExecTool(
       rejectExecApprovalShellCommand(params.command);
 
       const hiddenEnv = coerceEnv(defaults?.hiddenEnv);
+      const invalidHiddenEnvKeys = findDisallowedHiddenEnvKeys(hiddenEnv);
+      if (invalidHiddenEnvKeys.length > 0) {
+        throw new Error(
+          `Security Violation: hidden env key(s) are not allowed: ${invalidHiddenEnvKeys.join(", ")}. Allowed keys: ${getAllowedHiddenEnvKeys().join(", ")}.`,
+        );
+      }
       const scrubInheritedDecisionalToken = shouldScrubInheritedDecisionalToken(hiddenEnv);
       const inheritedBaseEnv = coerceEnv(process.env);
       if (scrubInheritedDecisionalToken) {

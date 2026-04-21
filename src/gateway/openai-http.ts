@@ -19,6 +19,7 @@ import {
   type InputImageSource,
 } from "../media/input-files.js";
 import { defaultRuntime } from "../runtime.js";
+import { coerceAllowedHiddenEnv } from "../shared/hidden-env.js";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
@@ -531,17 +532,6 @@ export const __testOnlyOpenAiHttp = {
   resolveOpenAiChatCompletionsLimits,
 };
 
-function coerceStringRecord(value: unknown): Record<string, string> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-  const entries = Object.entries(value).filter(([, entry]) => typeof entry === "string");
-  if (entries.length === 0) {
-    return undefined;
-  }
-  return Object.fromEntries(entries) as Record<string, string>;
-}
-
 function buildAgentPrompt(
   messagesUnknown: unknown,
   activeUserMessageIndex: number,
@@ -770,7 +760,7 @@ export async function handleOpenAiHttpRequest(
     messageChannel,
     abortSignal: abortController.signal,
     senderIsOwner,
-    hiddenEnv: coerceStringRecord(payload.hidden_env),
+    hiddenEnv: coerceAllowedHiddenEnv(payload.hidden_env),
   });
 
   if (!stream) {

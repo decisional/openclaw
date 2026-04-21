@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { coerceAllowedHiddenEnv } from "../../shared/hidden-env.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import type { AuthRateLimiter } from "../auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "../auth.js";
@@ -37,18 +38,7 @@ function coerceString(value: unknown): string {
   if (typeof value !== "string") {
     return "";
   }
-	return normalizeOptionalString(value) ?? "";
-}
-
-function coerceStringRecord(value: unknown): Record<string, string> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return undefined;
-  }
-  const entries = Object.entries(value).filter(([, entry]) => typeof entry === "string");
-  if (entries.length === 0) {
-    return undefined;
-  }
-  return Object.fromEntries(entries) as Record<string, string>;
+  return normalizeOptionalString(value) ?? "";
 }
 
 function serializeJob(job: WorkJobRecord) {
@@ -136,7 +126,7 @@ async function handleCreate(
         messageChannel: coerceString(body.message_channel) || undefined,
         model: coerceString(body.model) || undefined,
         sessionKey: coerceString(body.session_key) || undefined,
-        hiddenEnv: coerceStringRecord(body.hidden_env),
+        hiddenEnv: coerceAllowedHiddenEnv(body.hidden_env),
       },
     });
   } catch (err) {

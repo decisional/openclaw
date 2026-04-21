@@ -223,6 +223,22 @@ describe("exec PATH login shell merge", () => {
     ).rejects.toThrow(/reserved key/);
   });
 
+  it("rejects hidden env keys outside the allowlist", async () => {
+    const tool = createExecTool({
+      host: "gateway",
+      security: "full",
+      ask: "off",
+      hiddenEnv: { LD_PRELOAD: "/tmp/evil.so" },
+    });
+
+    await expect(
+      tool.execute("call-hidden-env-invalid", {
+        command: "echo blocked",
+        yieldMs: FOREGROUND_TEST_YIELD_MS,
+      }),
+    ).rejects.toThrow(/hidden env key\(s\) are not allowed: LD_PRELOAD/);
+  });
+
   it("throws security violation when env.PATH is provided", async () => {
     if (isWin) {
       return;
