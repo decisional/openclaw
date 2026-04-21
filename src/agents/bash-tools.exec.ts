@@ -111,6 +111,8 @@ const SKIPPABLE_SCRIPT_PREFLIGHT_FS_ERROR_CODES = new Set([
   "EPERM",
 ]);
 
+const DECISIONAL_TOKEN_ENV_KEY = "DECISIONAL_TOKEN";
+
 function getNodeErrorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) {
     return undefined;
@@ -187,6 +189,19 @@ function stripPreflightEnvPrefix(argv: string[]): string[] {
     }
   }
   return argv.slice(idx);
+}
+
+function shouldScrubInheritedDecisionalToken(hiddenEnv: Record<string, string>): boolean {
+  return Object.prototype.hasOwnProperty.call(hiddenEnv, DECISIONAL_TOKEN_ENV_KEY);
+}
+
+function buildLoginShellProbeEnv(scrubDecisionalToken: boolean): NodeJS.ProcessEnv {
+  if (!scrubDecisionalToken) {
+    return process.env;
+  }
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  delete env[DECISIONAL_TOKEN_ENV_KEY];
+  return env;
 }
 
 function findFirstPythonScriptArg(tokens: string[]): string | null {
@@ -1506,8 +1521,15 @@ export function createExecTool(
       }
       rejectExecApprovalShellCommand(params.command);
 
-      const inheritedBaseEnv = coerceEnv(process.env);
       const hiddenEnv = coerceEnv(defaults?.hiddenEnv);
+      const scrubInheritedDecisionalToken = shouldScrubInheritedDecisionalToken(hiddenEnv);
+      const inheritedBaseEnv = coerceEnv(process.env);
+      if (scrubInheritedDecisionalToken) {
+        // Restricted sessions inject a scoped token via hiddenEnv. Strip the
+        // ambient baseline token from inherited child env so helper subprocesses
+        // and the spawned shell cannot fall back to the broader credential.
+        delete inheritedBaseEnv[DECISIONAL_TOKEN_ENV_KEY];
+      }
       const hiddenEnvKeys = Object.keys(hiddenEnv);
       if (
         params.env &&
@@ -1573,9 +1595,10 @@ export function createExecTool(
           : (hostEnvResult?.env ?? inheritedBaseEnv);
 
       if (!sandbox && host === "gateway" && !params.env?.PATH) {
+        const shellPathProbeEnv = buildLoginShellProbeEnv(scrubInheritedDecisionalToken);
         const shellPath = getShellPathFromLoginShell({
-          env: process.env,
-          timeoutMs: resolveShellEnvFallbackTimeoutMs(process.env),
+          env: shellPathProbeEnv,
+          timeoutMs: resolveShellEnvFallbackTimeoutMs(shellPathProbeEnv),
         });
         applyShellPath(env, shellPath);
       }
