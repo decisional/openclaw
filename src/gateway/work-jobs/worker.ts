@@ -1,8 +1,7 @@
 import type { CliDeps } from "../../cli/deps.js";
 import { createDefaultDeps } from "../../cli/deps.js";
-import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
 import { logWarn } from "../../logger.js";
-import type { WorkJobRecord, WorkJobResult } from "./types.js";
+import { defaultRuntime, type RuntimeEnv } from "../../runtime.js";
 import {
   claimNextQueuedJob,
   completeJob,
@@ -10,6 +9,7 @@ import {
   heartbeatJob,
   recoverStaleRunningJobs,
 } from "./store.js";
+import type { WorkJobRecord, WorkJobResult } from "./types.js";
 
 const DEFAULT_LEASE_MS = 60_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 20_000;
@@ -42,8 +42,7 @@ export class WorkJobWorker {
   constructor(opts: WorkerOptions = {}) {
     const runtime = opts.runtime ?? defaultRuntime;
     const deps = opts.deps ?? createDefaultDeps();
-    this.runJob =
-      opts.runJob ?? ((job: WorkJobRecord) => defaultRunJob(job, runtime, deps));
+    this.runJob = opts.runJob ?? ((job: WorkJobRecord) => defaultRunJob(job, runtime, deps));
     this.leaseMs = opts.leaseMs ?? DEFAULT_LEASE_MS;
     this.heartbeatIntervalMs = opts.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
     this.idlePollMs = opts.idlePollMs ?? DEFAULT_IDLE_POLL_MS;
@@ -56,9 +55,7 @@ export class WorkJobWorker {
     }
     const recovered = recoverStaleRunningJobs();
     if (recovered.length > 0) {
-      logWarn(
-        `work-jobs: recovered ${recovered.length} stale running jobs from previous process`,
-      );
+      logWarn(`work-jobs: recovered ${recovered.length} stale running jobs from previous process`);
     }
     this.loopPromise = this.loop();
   }
@@ -169,6 +166,7 @@ async function defaultRunJob(
     message,
     extraSystemPrompt: systemPrompt,
     sessionKey,
+    workContextId: job.workContextId,
     runId,
     deliver: false as const,
     messageChannel,
@@ -176,7 +174,6 @@ async function defaultRunJob(
     senderIsOwner: true,
     allowModelOverride: true as const,
     model: job.inputs.model?.trim() || undefined,
-    hiddenEnv: job.inputs.hiddenEnv,
   };
   const raw = (await agentCommandFromIngress(commandInput, runtime, deps)) as {
     payloads?: Array<{ text?: string }>;

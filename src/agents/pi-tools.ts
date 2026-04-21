@@ -252,6 +252,7 @@ export function createOpenClawCodingTools(options?: {
   messageThreadId?: string | number;
   sandbox?: SandboxContext | null;
   sessionKey?: string;
+  workContextId?: string;
   /** Ephemeral session UUID — regenerated on /new and /reset. */
   sessionId?: string;
   /** Stable run identifier for this agent invocation. */
@@ -482,6 +483,7 @@ export function createOpenClawCodingTools(options?: {
     allowBackground,
     scopeKey,
     sessionKey: options?.sessionKey,
+    workContextId: options?.workContextId,
     messageProvider: options?.messageProvider,
     currentChannelId: options?.currentChannelId,
     currentThreadTs: options?.currentThreadTs,

@@ -67,16 +67,16 @@ describe("openai image budget accounting", () => {
     ]);
   });
 
-  it("passes hidden env through compat agent command input", () => {
+  it("passes workContextId through compat agent command input", () => {
     const input = __testOnlyOpenAiHttp.buildAgentCommandInput({
       prompt: { message: "fix it" },
       sessionKey: "session-key",
+      workContextId: "work-context:test",
       runId: "run-id",
       messageChannel: "webchat",
       senderIsOwner: true,
-      hiddenEnv: { DECISIONAL_TOKEN: "dex_scoped" },
     });
 
-    expect(input.hiddenEnv).toEqual({ DECISIONAL_TOKEN: "dex_scoped" });
+    expect(input.workContextId).toBe("work-context:test");
   });
 });

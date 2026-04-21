@@ -60,25 +60,31 @@ describe("work-jobs store", () => {
     expect(second.inputs.userMessage).toBe("hi"); // unchanged
   });
 
-  it("persists hiddenEnv across reload for scoped work credentials", async () => {
+  it("persists normalized work-job inputs across reload", async () => {
     const created = ensureJob({
-      workContextId: "ws:a:approval:hidden-env",
+      workContextId: "ws:a:approval:normalized-inputs",
       inputs: {
         userMessage: "hi",
-        hiddenEnv: {
-          DECISIONAL_TOKEN: "dex_scoped",
-          EMPTY: "   ",
-        },
+        systemPrompt: "system",
+        messageChannel: "webchat",
       },
     });
-    expect(created.inputs.hiddenEnv).toEqual({ DECISIONAL_TOKEN: "dex_scoped" });
+    expect(created.inputs).toMatchObject({
+      userMessage: "hi",
+      systemPrompt: "system",
+      messageChannel: "webchat",
+    });
 
     await __testing.flushPersistForTests();
     const customPath = path.join(tempDir, "work-jobs.json");
     __testing.reset({ customPath });
 
-    const reloaded = getJobByWorkContext("ws:a:approval:hidden-env");
-    expect(reloaded?.inputs.hiddenEnv).toEqual({ DECISIONAL_TOKEN: "dex_scoped" });
+    const reloaded = getJobByWorkContext("ws:a:approval:normalized-inputs");
+    expect(reloaded?.inputs).toMatchObject({
+      userMessage: "hi",
+      systemPrompt: "system",
+      messageChannel: "webchat",
+    });
   });
 
   it("rejects missing user_message", () => {
@@ -88,9 +94,9 @@ describe("work-jobs store", () => {
   });
 
   it("rejects missing work_context_id", () => {
-    expect(() =>
-      ensureJob({ workContextId: "", inputs: { userMessage: "hi" } }),
-    ).toThrow(/work_context_id/);
+    expect(() => ensureJob({ workContextId: "", inputs: { userMessage: "hi" } })).toThrow(
+      /work_context_id/,
+    );
   });
 
   it("claims queued jobs with lease and advances to running", () => {

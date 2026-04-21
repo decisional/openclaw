@@ -2,6 +2,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  __testing as credentialManagerTesting,
+  bindScopedDecisionalCredentialForWorkContext,
+  ensureSessionBoundToBaselineDecisional,
+  initializeGatewayCredentialManager,
+} from "../gateway/credential-manager.js";
 import type { ExecApprovalsResolved } from "../infra/exec-approvals.js";
 import { captureEnv } from "../test-utils/env.js";
 import { sanitizeBinaryOutput } from "./shell-utils.js";
@@ -91,6 +97,7 @@ describe("exec PATH login shell merge", () => {
 
   beforeEach(() => {
     envSnapshot = captureEnv(["PATH", "SHELL", "DECISIONAL_TOKEN"]);
+    credentialManagerTesting.reset();
     shellEnvMocks.getShellPathFromLoginShell.mockReset();
     shellEnvMocks.getShellPathFromLoginShell.mockReturnValue("/custom/bin:/opt/bin");
     shellEnvMocks.resolveShellEnvFallbackTimeoutMs.mockReset();
@@ -98,6 +105,7 @@ describe("exec PATH login shell merge", () => {
   });
 
   afterEach(() => {
+    credentialManagerTesting.reset();
     envSnapshot.restore();
   });
 
@@ -137,7 +145,7 @@ describe("exec PATH login shell merge", () => {
     expect(value).toBe("exec");
   });
 
-  it("inherits ambient DECISIONAL_TOKEN for normal host=gateway commands", async () => {
+  it("does not inherit ambient DECISIONAL_TOKEN without a credential binding", async () => {
     if (isWin) {
       return;
     }
@@ -146,6 +154,30 @@ describe("exec PATH login shell merge", () => {
 
     const tool = createExecTool({ host: "gateway", security: "full", ask: "off" });
     const result = await tool.execute("call-inherited-token", {
+      command: 'printf "%s" "${DECISIONAL_TOKEN:-}"',
+      yieldMs: FOREGROUND_TEST_YIELD_MS,
+    });
+    const value = normalizeText(result.content.find((c) => c.type === "text")?.text);
+
+    expect(value).toBe("(no output)");
+  });
+
+  it("injects baseline DECISIONAL_TOKEN for bound session_key commands", async () => {
+    if (isWin) {
+      return;
+    }
+
+    process.env.DECISIONAL_TOKEN = "dex_full";
+    initializeGatewayCredentialManager({ baselineToken: "dex_full" });
+    ensureSessionBoundToBaselineDecisional({ sessionKey: "slack:thread:1" });
+
+    const tool = createExecTool({
+      host: "gateway",
+      security: "full",
+      ask: "off",
+      sessionKey: "slack:thread:1",
+    });
+    const result = await tool.execute("call-bound-baseline-token", {
       command: 'printf "%s" "${DECISIONAL_TOKEN:-}"',
       yieldMs: FOREGROUND_TEST_YIELD_MS,
     });
@@ -204,6 +236,35 @@ describe("exec PATH login shell merge", () => {
     expect(value).toBe("dex_scoped");
     expect(shellPathMock).toHaveBeenCalledTimes(1);
     expect(probeEnv?.DECISIONAL_TOKEN).toBeUndefined();
+  });
+
+  it("prefers work-context scoped credentials over baseline session bindings", async () => {
+    if (isWin) {
+      return;
+    }
+
+    process.env.DECISIONAL_TOKEN = "dex_full";
+    initializeGatewayCredentialManager({ baselineToken: "dex_full" });
+    ensureSessionBoundToBaselineDecisional({ sessionKey: "slack:thread:2" });
+    bindScopedDecisionalCredentialForWorkContext({
+      workContextId: "work-context:fixer:1",
+      token: "dex_scoped",
+    });
+
+    const tool = createExecTool({
+      host: "gateway",
+      security: "full",
+      ask: "off",
+      sessionKey: "slack:thread:2",
+      workContextId: "work-context:fixer:1",
+    });
+    const result = await tool.execute("call-work-context-token", {
+      command: 'printf "%s" "${DECISIONAL_TOKEN:-}"',
+      yieldMs: FOREGROUND_TEST_YIELD_MS,
+    });
+    const value = normalizeText(result.content.find((c) => c.type === "text")?.text);
+
+    expect(value).toBe("dex_scoped");
   });
 
   it("blocks tool-call env overrides for hidden env keys", async () => {
