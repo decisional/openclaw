@@ -38,6 +38,8 @@ type DecisionalCredentialResolution = {
   bindingKey: string;
 };
 
+export type ScopedDecisionalHiddenEnvBindingStatus = "noop" | "bound" | "missing_work_context";
+
 const FILE_VERSION = 1;
 const BASELINE_SLOT_ID = "baseline_decisional";
 const SESSION_BINDING_PREFIX = "credential-binding:session";
@@ -484,6 +486,27 @@ export function bindScopedDecisionalCredentialForWorkContext(params: {
   });
 }
 
+export function bindScopedDecisionalCredentialFromHiddenEnv(params: {
+  workContextId?: string | undefined | null;
+  hiddenEnv?: Record<string, string> | undefined;
+  now?: number;
+}): ScopedDecisionalHiddenEnvBindingStatus {
+  const token = normalizeValue(params.hiddenEnv?.[DECISIONAL_TOKEN_ENV_KEY] ?? "");
+  if (!token) {
+    return "noop";
+  }
+  const workContextId = normalizeValue(params.workContextId ?? "");
+  if (!workContextId) {
+    return "missing_work_context";
+  }
+  bindScopedDecisionalCredentialForWorkContext({
+    workContextId,
+    token,
+    now: params.now,
+  });
+  return "bound";
+}
+
 export function resolveDecisionalCredentialEnv(params: {
   sessionKey?: string | undefined;
   workContextId?: string | undefined;
@@ -507,8 +530,21 @@ export function resolveDecisionalCredentialEnv(params: {
     bindingKey: params.sessionKey,
     now,
   });
-  if (sessionResolution) {
-    return { [DECISIONAL_TOKEN_ENV_KEY]: sessionResolution.token };
+  if (!sessionResolution) {
+    ensureSessionBoundToBaselineDecisional({
+      sessionKey: params.sessionKey,
+      now,
+    });
+  }
+  const resolvedSession = sessionResolution
+    ? sessionResolution
+    : resolveBoundSlot({
+        bindingKind: "session_key",
+        bindingKey: params.sessionKey,
+        now,
+      });
+  if (resolvedSession) {
+    return { [DECISIONAL_TOKEN_ENV_KEY]: resolvedSession.token };
   }
   return undefined;
 }

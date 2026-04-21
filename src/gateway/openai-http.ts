@@ -31,7 +31,7 @@ import {
 } from "./agent-prompt.js";
 import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
-import { bindScopedDecisionalCredentialForWorkContext } from "./credential-manager.js";
+import { bindScopedDecisionalCredentialFromHiddenEnv } from "./credential-manager.js";
 import { sendJson, setSseHeaders, watchClientDisconnect, writeDone } from "./http-common.js";
 import { handleGatewayPostJsonEndpoint } from "./http-endpoint-helpers.js";
 import {
@@ -751,8 +751,12 @@ export async function handleOpenAiHttpRequest(
   const deps = createDefaultDeps();
   const abortController = new AbortController();
   const hiddenEnv = coerceAllowedHiddenEnv(payload.hidden_env);
-  const scopedToken = hiddenEnv?.DECISIONAL_TOKEN;
-  if (scopedToken && !workContextId) {
+  if (
+    bindScopedDecisionalCredentialFromHiddenEnv({
+      workContextId,
+      hiddenEnv,
+    }) === "missing_work_context"
+  ) {
     sendJson(res, 400, {
       error: {
         message: "hidden_env.DECISIONAL_TOKEN requires x-openclaw-work-context.",
@@ -760,12 +764,6 @@ export async function handleOpenAiHttpRequest(
       },
     });
     return true;
-  }
-  if (scopedToken && workContextId) {
-    bindScopedDecisionalCredentialForWorkContext({
-      workContextId,
-      token: scopedToken,
-    });
   }
   const commandInput = buildAgentCommandInput({
     prompt: {

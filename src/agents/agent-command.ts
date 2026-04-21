@@ -18,7 +18,6 @@ import { setRuntimeConfigSnapshot } from "../config/runtime-snapshot.js";
 import type { SessionEntry } from "../config/sessions/types.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { isSecretRef } from "../config/types.secrets.js";
-import { ensureSessionBoundToBaselineDecisional } from "../gateway/credential-manager.js";
 import {
   clearAgentRunContext,
   emitAgentEvent,
@@ -1094,11 +1093,6 @@ export async function agentCommandFromIngress(
   }
   if (typeof opts.allowModelOverride !== "boolean") {
     throw new Error("allowModelOverride must be explicitly set for ingress agent runs.");
-  }
-  if (!opts.workContextId && opts.sessionKey) {
-    // Ordinary ingress sessions default to the baseline credential slot. Restricted
-    // work-context runs stay fail-closed and must resolve their scoped binding separately.
-    ensureSessionBoundToBaselineDecisional({ sessionKey: opts.sessionKey });
   }
   return await agentCommandInternal(
     {
