@@ -277,6 +277,7 @@ function buildAgentCommandInput(params: {
   modelOverride?: string;
   sessionKey: string;
   workContextId?: string;
+  hiddenEnv?: Record<string, string>;
   runId: string;
   messageChannel: string;
   senderIsOwner: boolean;
@@ -289,6 +290,7 @@ function buildAgentCommandInput(params: {
     model: params.modelOverride,
     sessionKey: params.sessionKey,
     workContextId: params.workContextId,
+    hiddenEnv: params.hiddenEnv,
     runId: params.runId,
     deliver: false as const,
     messageChannel: params.messageChannel,
@@ -774,6 +776,7 @@ export async function handleOpenAiHttpRequest(
     modelOverride,
     sessionKey,
     workContextId,
+    hiddenEnv,
     runId,
     messageChannel,
     abortSignal: abortController.signal,

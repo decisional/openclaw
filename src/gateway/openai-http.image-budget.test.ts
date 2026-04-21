@@ -72,11 +72,13 @@ describe("openai image budget accounting", () => {
       prompt: { message: "fix it" },
       sessionKey: "session-key",
       workContextId: "work-context:test",
+      hiddenEnv: { OPENCLAW_TEST_KEY: "value" },
       runId: "run-id",
       messageChannel: "webchat",
       senderIsOwner: true,
     });
 
     expect(input.workContextId).toBe("work-context:test");
+    expect(input.hiddenEnv).toEqual({ OPENCLAW_TEST_KEY: "value" });
   });
 });

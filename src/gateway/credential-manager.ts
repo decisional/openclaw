@@ -340,12 +340,12 @@ function bindCredentialSlot(params: {
   slotId: string;
   now?: number;
 }): CredentialBindingRecord | null {
+  loadIntoMemory();
   const bindingKey = normalizeValue(params.bindingKey);
   const slotId = normalizeValue(params.slotId);
   if (!bindingKey || !slotId || !slotsById.has(slotId)) {
     return null;
   }
-  loadIntoMemory();
   const now = params.now ?? Date.now();
   const map = resolveBindingMap(params.bindingKind);
   const existing = map.get(bindingKey);
