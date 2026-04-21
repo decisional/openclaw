@@ -500,6 +500,7 @@ export async function runEmbeddedAttempt(
             ...buildEmbeddedAttemptToolRunContext(params),
             exec: {
               ...params.execOverrides,
+              hiddenEnv: params.hiddenEnv,
               elevated: params.bashElevated,
             },
             sandbox,

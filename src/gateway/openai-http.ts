@@ -62,6 +62,7 @@ type OpenAiChatCompletionRequest = {
   stream_options?: unknown;
   messages?: unknown;
   user?: unknown;
+  hidden_env?: unknown;
 };
 
 const DEFAULT_OPENAI_CHAT_COMPLETIONS_BODY_BYTES = 20 * 1024 * 1024;
@@ -275,6 +276,7 @@ function buildAgentCommandInput(params: {
   runId: string;
   messageChannel: string;
   senderIsOwner: boolean;
+  hiddenEnv?: Record<string, string>;
   abortSignal?: AbortSignal;
 }) {
   return {
@@ -289,6 +291,7 @@ function buildAgentCommandInput(params: {
     bestEffortDeliver: false as const,
     senderIsOwner: params.senderIsOwner,
     allowModelOverride: true as const,
+    hiddenEnv: params.hiddenEnv,
     abortSignal: params.abortSignal,
   };
 }
@@ -523,9 +526,21 @@ async function resolveImagesForRequest(
 }
 
 export const __testOnlyOpenAiHttp = {
+  buildAgentCommandInput,
   resolveImagesForRequest,
   resolveOpenAiChatCompletionsLimits,
 };
+
+function coerceStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = Object.entries(value).filter(([, entry]) => typeof entry === "string");
+  if (entries.length === 0) {
+    return undefined;
+  }
+  return Object.fromEntries(entries) as Record<string, string>;
+}
 
 function buildAgentPrompt(
   messagesUnknown: unknown,
@@ -755,6 +770,7 @@ export async function handleOpenAiHttpRequest(
     messageChannel,
     abortSignal: abortController.signal,
     senderIsOwner,
+    hiddenEnv: coerceStringRecord(payload.hidden_env),
   });
 
   if (!stream) {

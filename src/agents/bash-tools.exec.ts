@@ -1507,6 +1507,18 @@ export function createExecTool(
       rejectExecApprovalShellCommand(params.command);
 
       const inheritedBaseEnv = coerceEnv(process.env);
+      const hiddenEnv = coerceEnv(defaults?.hiddenEnv);
+      const hiddenEnvKeys = Object.keys(hiddenEnv);
+      if (
+        params.env &&
+        hiddenEnvKeys.some((key) => Object.prototype.hasOwnProperty.call(params.env, key))
+      ) {
+        throw new Error(
+          `Security Violation: Environment variable override is not allowed for reserved key(s): ${hiddenEnvKeys
+            .filter((key) => Object.prototype.hasOwnProperty.call(params.env, key))
+            .join(", ")}.`,
+        );
+      }
       const hostEnvResult =
         host === "sandbox"
           ? null
@@ -1576,6 +1588,10 @@ export function createExecTool(
         );
       } else {
         applyPathPrepend(env, defaultPathPrepend);
+      }
+
+      for (const [key, value] of Object.entries(hiddenEnv)) {
+        env[key] = value;
       }
 
       if (host === "node") {

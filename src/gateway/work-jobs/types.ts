@@ -34,6 +34,7 @@ export type WorkJobInputs = {
   messageChannel?: string;
   model?: string;
   sessionKey?: string;
+  hiddenEnv?: Record<string, string>;
 };
 
 export type WorkJobRecord = {

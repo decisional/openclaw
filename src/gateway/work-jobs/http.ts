@@ -30,13 +30,25 @@ type PostRequestBody = {
   model?: unknown;
   session_key?: unknown;
   retry_if_failed?: unknown;
+  hidden_env?: unknown;
 };
 
 function coerceString(value: unknown): string {
   if (typeof value !== "string") {
     return "";
   }
-  return normalizeOptionalString(value) ?? "";
+	return normalizeOptionalString(value) ?? "";
+}
+
+function coerceStringRecord(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const entries = Object.entries(value).filter(([, entry]) => typeof entry === "string");
+  if (entries.length === 0) {
+    return undefined;
+  }
+  return Object.fromEntries(entries) as Record<string, string>;
 }
 
 function serializeJob(job: WorkJobRecord) {
@@ -124,6 +136,7 @@ async function handleCreate(
         messageChannel: coerceString(body.message_channel) || undefined,
         model: coerceString(body.model) || undefined,
         sessionKey: coerceString(body.session_key) || undefined,
+        hiddenEnv: coerceStringRecord(body.hidden_env),
       },
     });
   } catch (err) {
