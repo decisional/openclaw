@@ -90,6 +90,8 @@ export type AgentCommandOpts = {
   workspaceDir?: SpawnedRunMetadata["workspaceDir"];
   /** Hidden env injected into exec tool calls for this run. */
   hiddenEnv?: Record<string, string>;
+  /** Restricted work-context id for exec credential resolution. */
+  workContextId?: string;
   /** Force bundled MCP teardown when a one-shot local run completes. */
   cleanupBundleMcpOnRunEnd?: boolean;
 };

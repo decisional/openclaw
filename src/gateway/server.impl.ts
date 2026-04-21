@@ -39,6 +39,7 @@ import {
 import { runSetupWizard } from "../wizard/setup.js";
 import { createAuthRateLimiter, type AuthRateLimiter } from "./auth-rate-limit.js";
 import { resolveGatewayAuth } from "./auth.js";
+import { initializeGatewayCredentialManager } from "./credential-manager.js";
 import { closeMcpLoopbackServer } from "./mcp-http.js";
 import { createGatewayAuxHandlers } from "./server-aux-handlers.js";
 import { createChannelManager } from "./server-channels.js";
@@ -251,6 +252,9 @@ export async function startGatewayServer(
     activateRuntimeSecrets,
   });
   cfgAtStart = authBootstrap.cfg;
+  initializeGatewayCredentialManager({
+    baselineToken: process.env.DECISIONAL_TOKEN,
+  });
   if (authBootstrap.generatedToken) {
     if (authBootstrap.persistedGeneratedToken) {
       log.info(

@@ -55,6 +55,12 @@ const forwardingCases = [
     params: { internalEvents },
     expected: { internalEvents },
   },
+  {
+    name: "forwards workContextId so exec can resolve scoped credentials by work context",
+    runId: "forward-workContextId",
+    params: { workContextId: "work-context:test" },
+    expected: { workContextId: "work-context:test" },
+  },
 ] satisfies ForwardingCase[];
 
 describe("runEmbeddedPiAgent forwards optional params to runEmbeddedAttempt", () => {

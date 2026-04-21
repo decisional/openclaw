@@ -421,6 +421,7 @@ async function runResponsesAgentCommand(params: {
   modelOverride?: string;
   streamParams: { maxTokens: number } | undefined;
   sessionKey: string;
+  workContextId?: string;
   runId: string;
   messageChannel: string;
   senderIsOwner: boolean;
@@ -436,6 +437,7 @@ async function runResponsesAgentCommand(params: {
       model: params.modelOverride,
       streamParams: params.streamParams ?? undefined,
       sessionKey: params.sessionKey,
+      workContextId: params.workContextId,
       runId: params.runId,
       deliver: false,
       messageChannel: params.messageChannel,
@@ -727,6 +729,7 @@ export async function handleOpenResponsesHttpRequest(
         modelOverride,
         streamParams,
         sessionKey,
+        workContextId,
         runId: responseId,
         messageChannel,
         senderIsOwner,
@@ -1008,6 +1011,7 @@ export async function handleOpenResponsesHttpRequest(
         modelOverride,
         streamParams,
         sessionKey,
+        workContextId,
         runId: responseId,
         messageChannel,
         senderIsOwner,

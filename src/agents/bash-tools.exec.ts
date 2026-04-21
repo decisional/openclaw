@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { AgentToolResult } from "@mariozechner/pi-agent-core";
+import { resolveDecisionalCredentialEnv } from "../gateway/credential-manager.js";
 import { analyzeShellCommand } from "../infra/exec-approvals-analysis.js";
 import { type ExecHost, loadExecApprovals, maxAsk, minSecurity } from "../infra/exec-approvals.js";
 import { resolveExecSafeBinRuntimePolicy } from "../infra/exec-safe-bin-runtime-policy.js";
@@ -194,14 +195,7 @@ function stripPreflightEnvPrefix(argv: string[]): string[] {
   return argv.slice(idx);
 }
 
-function shouldScrubInheritedDecisionalToken(hiddenEnv: Record<string, string>): boolean {
-  return Object.prototype.hasOwnProperty.call(hiddenEnv, DECISIONAL_TOKEN_ENV_KEY);
-}
-
-function buildLoginShellProbeEnv(scrubDecisionalToken: boolean): NodeJS.ProcessEnv {
-  if (!scrubDecisionalToken) {
-    return process.env;
-  }
+function buildLoginShellProbeEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   delete env[DECISIONAL_TOKEN_ENV_KEY];
   return env;
@@ -1524,21 +1518,27 @@ export function createExecTool(
       }
       rejectExecApprovalShellCommand(params.command);
 
-      const hiddenEnv = coerceEnv(defaults?.hiddenEnv);
+      const explicitHiddenEnv = coerceEnv(defaults?.hiddenEnv);
+      const resolvedCredentialEnv = coerceEnv(
+        resolveDecisionalCredentialEnv({
+          sessionKey: defaults?.sessionKey,
+          workContextId: defaults?.workContextId,
+        }),
+      );
+      const hiddenEnv = {
+        ...explicitHiddenEnv,
+        ...resolvedCredentialEnv,
+      };
       const invalidHiddenEnvKeys = findDisallowedHiddenEnvKeys(hiddenEnv);
       if (invalidHiddenEnvKeys.length > 0) {
         throw new Error(
           `Security Violation: hidden env key(s) are not allowed: ${invalidHiddenEnvKeys.join(", ")}. Allowed keys: ${getAllowedHiddenEnvKeys().join(", ")}.`,
         );
       }
-      const scrubInheritedDecisionalToken = shouldScrubInheritedDecisionalToken(hiddenEnv);
       const inheritedBaseEnv = coerceEnv(process.env);
-      if (scrubInheritedDecisionalToken) {
-        // Restricted sessions inject a scoped token via hiddenEnv. Strip the
-        // ambient baseline token from inherited child env so helper subprocesses
-        // and the spawned shell cannot fall back to the broader credential.
-        delete inheritedBaseEnv[DECISIONAL_TOKEN_ENV_KEY];
-      }
+      // DECISIONAL_TOKEN is injected only after credential resolution. Do not
+      // inherit the gateway process token into child exec environments.
+      delete inheritedBaseEnv[DECISIONAL_TOKEN_ENV_KEY];
       const hiddenEnvKeys = Object.keys(hiddenEnv);
       if (
         params.env &&
@@ -1604,7 +1604,7 @@ export function createExecTool(
           : (hostEnvResult?.env ?? inheritedBaseEnv);
 
       if (!sandbox && host === "gateway" && !params.env?.PATH) {
-        const shellPathProbeEnv = buildLoginShellProbeEnv(scrubInheritedDecisionalToken);
+        const shellPathProbeEnv = buildLoginShellProbeEnv();
         const shellPath = getShellPathFromLoginShell({
           env: shellPathProbeEnv,
           timeoutMs: resolveShellEnvFallbackTimeoutMs(shellPathProbeEnv),

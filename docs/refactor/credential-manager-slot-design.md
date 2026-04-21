@@ -53,11 +53,11 @@ Bindings should be persisted in a small internal store so they survive process r
 
 Exec-time Decisional token resolution must be:
 
-1. `work_context_id` binding
-2. `session_key` binding
-3. no token
+1. If `work_context_id` is present, resolve only the `work_context_id` binding.
+2. Else resolve the `session_key` binding.
+3. Else no token.
 
-This is intentionally fail-closed. If neither binding exists, exec should not inject a Decisional token implicitly.
+This is intentionally fail-closed. If a restricted run presents a `work_context_id` but no scoped binding exists, exec should not fall back to a baseline session credential.
 
 The baseline behavior for normal sessions comes from creating the session binding, not from ambient fallback at exec time.
 
@@ -72,7 +72,7 @@ The baseline behavior for normal sessions comes from creating the session bindin
 
 - When restricted fixer or agent work starts, create or attach a scoped credential slot.
 - Bind `work_context_id` to that scoped slot.
-- Exec within that work context resolves the scoped token first, even if the enclosing session also has a baseline binding.
+- Exec within that work context resolves the scoped token authoritatively. If the scoped binding is missing, the run gets no Decisional token even if some baseline session binding exists elsewhere.
 
 This gives normal channel sessions full access by default while forcing restricted work onto scoped credentials.
 
@@ -100,7 +100,7 @@ This gives normal channel sessions full access by default while forcing restrict
 ### Exec
 
 1. Gather the active `work_context_id` and `session_key`.
-2. Resolve bindings in the required order.
+2. Resolve bindings in the required order, with `work_context_id` treated as an authoritative restricted scope.
 3. Materialize the chosen slot into the child exec env.
 4. If nothing resolves, inject no Decisional token.
 
@@ -129,6 +129,6 @@ This keeps the external exec behavior stable while moving credential ownership i
 1. `baseline_decisional` loads at startup and is available for binding.
 2. Normal channel sessions get full access through `session_key -> baseline_decisional`.
 3. Restricted fixer or agent work gets scoped access through `work_context_id` bindings.
-4. Exec resolves credentials in this exact order: work context, then session, else no token.
+4. Exec resolves credentials with `work_context_id` as an authoritative restricted scope: when present, use that scoped binding or no token; otherwise fall back to the session binding; otherwise no token.
 5. Binding stores never persist plaintext token copies.
 6. The manager can continue using `hiddenEnv` as the last-mile exec transport during rollout.

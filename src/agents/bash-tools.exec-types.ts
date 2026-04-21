@@ -25,6 +25,7 @@ export type ExecToolDefaults = {
   allowBackground?: boolean;
   scopeKey?: string;
   sessionKey?: string;
+  workContextId?: string;
   messageProvider?: string;
   currentChannelId?: string;
   currentThreadTs?: string;

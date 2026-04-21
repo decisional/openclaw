@@ -38,20 +38,6 @@ function normalizeValue(value: string | undefined | null): string {
   return normalizeOptionalString(value) ?? "";
 }
 
-function normalizeHiddenEnv(
-  hiddenEnv: Record<string, string> | undefined | null,
-): Record<string, string> | undefined {
-  if (!hiddenEnv || typeof hiddenEnv !== "object") {
-    return undefined;
-  }
-  const normalized = Object.fromEntries(
-    Object.entries(hiddenEnv)
-      .map(([key, value]) => [normalizeValue(key), normalizeValue(value)] as const)
-      .filter(([key, value]) => key && value),
-  );
-  return Object.keys(normalized).length > 0 ? normalized : undefined;
-}
-
 function isTerminal(state: WorkJobState): boolean {
   return state === "completed" || state === "failed" || state === "cancelled";
 }
@@ -124,10 +110,10 @@ function loadIntoMemory(): void {
         messageChannel: normalizeValue(job.inputs?.messageChannel) || undefined,
         model: normalizeValue(job.inputs?.model) || undefined,
         sessionKey: normalizeValue(job.inputs?.sessionKey) || undefined,
-        hiddenEnv: normalizeHiddenEnv(job.inputs?.hiddenEnv),
       },
       state: job.state ?? "queued",
-      attempts: typeof job.attempts === "number" && Number.isFinite(job.attempts) ? job.attempts : 0,
+      attempts:
+        typeof job.attempts === "number" && Number.isFinite(job.attempts) ? job.attempts : 0,
       createdAt: typeof job.createdAt === "number" ? job.createdAt : Date.now(),
       updatedAt: typeof job.updatedAt === "number" ? job.updatedAt : Date.now(),
     };
@@ -194,7 +180,6 @@ export function ensureJob(params: {
       messageChannel: normalizeValue(params.inputs.messageChannel) || undefined,
       model: normalizeValue(params.inputs.model) || undefined,
       sessionKey: normalizeValue(params.inputs.sessionKey) || undefined,
-      hiddenEnv: normalizeHiddenEnv(params.inputs.hiddenEnv),
     },
     createdAt: now,
     updatedAt: now,
@@ -209,7 +194,10 @@ export function ensureJob(params: {
 /**
  * Reset a failed job back to queued so it can be re-run. No-op for non-failed jobs.
  */
-export function requeueFailed(workContextId: string, now: number = Date.now()): WorkJobRecord | null {
+export function requeueFailed(
+  workContextId: string,
+  now: number = Date.now(),
+): WorkJobRecord | null {
   loadIntoMemory();
   const job = jobsByWorkContext.get(normalizeValue(workContextId));
   if (!job) {
@@ -368,10 +356,7 @@ export function recoverStaleRunningJobs(now: number = Date.now()): WorkJobRecord
  * Record the first Slack post for this work item so duplicate posts can be suppressed.
  * Returns false if a post was already recorded (caller should skip), true if this is the first.
  */
-export function recordFirstSlackPost(params: {
-  workContextId: string;
-  now?: number;
-}): boolean {
+export function recordFirstSlackPost(params: { workContextId: string; now?: number }): boolean {
   loadIntoMemory();
   const job = jobsByWorkContext.get(normalizeValue(params.workContextId));
   if (!job) {

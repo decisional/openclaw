@@ -3,6 +3,7 @@ import { coerceAllowedHiddenEnv } from "../../shared/hidden-env.js";
 import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import type { AuthRateLimiter } from "../auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "../auth.js";
+import { bindScopedDecisionalCredentialFromHiddenEnv } from "../credential-manager.js";
 import { sendInvalidRequest, sendJson, sendMethodNotAllowed, sendText } from "../http-common.js";
 import { handleGatewayPostJsonEndpoint } from "../http-endpoint-helpers.js";
 import { authorizeGatewayHttpRequestOrReply } from "../http-utils.js";
@@ -118,6 +119,10 @@ async function handleCreate(
 
   let job: WorkJobRecord;
   try {
+    bindScopedDecisionalCredentialFromHiddenEnv({
+      workContextId,
+      hiddenEnv: coerceAllowedHiddenEnv(body.hidden_env),
+    });
     job = ensureJob({
       workContextId,
       inputs: {
@@ -126,7 +131,6 @@ async function handleCreate(
         messageChannel: coerceString(body.message_channel) || undefined,
         model: coerceString(body.model) || undefined,
         sessionKey: coerceString(body.session_key) || undefined,
-        hiddenEnv: coerceAllowedHiddenEnv(body.hidden_env),
       },
     });
   } catch (err) {

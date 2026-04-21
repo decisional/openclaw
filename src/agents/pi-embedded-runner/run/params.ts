@@ -22,6 +22,7 @@ export type EmbeddedRunTrigger = "cron" | "heartbeat" | "manual" | "memory" | "o
 export type RunEmbeddedPiAgentParams = {
   sessionId: string;
   sessionKey?: string;
+  workContextId?: string;
   agentId?: string;
   messageChannel?: string;
   messageProvider?: string;

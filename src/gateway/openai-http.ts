@@ -31,6 +31,7 @@ import {
 } from "./agent-prompt.js";
 import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
+import { bindScopedDecisionalCredentialFromHiddenEnv } from "./credential-manager.js";
 import { sendJson, setSseHeaders, watchClientDisconnect, writeDone } from "./http-common.js";
 import { handleGatewayPostJsonEndpoint } from "./http-endpoint-helpers.js";
 import {
@@ -186,7 +187,8 @@ function createOpenClawCompatDebugCollector(params: {
       thoughts = next;
       return;
     }
-    const remainingBytes = OPENCLAW_COMPAT_DEBUG_MAX_THOUGHT_BYTES - Buffer.byteLength(thoughts, "utf8");
+    const remainingBytes =
+      OPENCLAW_COMPAT_DEBUG_MAX_THOUGHT_BYTES - Buffer.byteLength(thoughts, "utf8");
     if (remainingBytes > 0) {
       const truncated = truncateUtf8ToByteLimit(value, remainingBytes);
       thoughts += truncated;
@@ -274,10 +276,11 @@ function buildAgentCommandInput(params: {
   prompt: { message: string; extraSystemPrompt?: string; images?: ImageContent[] };
   modelOverride?: string;
   sessionKey: string;
+  workContextId?: string;
+  hiddenEnv?: Record<string, string>;
   runId: string;
   messageChannel: string;
   senderIsOwner: boolean;
-  hiddenEnv?: Record<string, string>;
   abortSignal?: AbortSignal;
 }) {
   return {
@@ -286,13 +289,14 @@ function buildAgentCommandInput(params: {
     images: params.prompt.images,
     model: params.modelOverride,
     sessionKey: params.sessionKey,
+    workContextId: params.workContextId,
+    hiddenEnv: params.hiddenEnv,
     runId: params.runId,
     deliver: false as const,
     messageChannel: params.messageChannel,
     bestEffortDeliver: false as const,
     senderIsOwner: params.senderIsOwner,
     allowModelOverride: true as const,
-    hiddenEnv: params.hiddenEnv,
     abortSignal: params.abortSignal,
   };
 }
@@ -748,6 +752,21 @@ export async function handleOpenAiHttpRequest(
   const runId = `chatcmpl_${randomUUID()}`;
   const deps = createDefaultDeps();
   const abortController = new AbortController();
+  const hiddenEnv = coerceAllowedHiddenEnv(payload.hidden_env);
+  if (
+    bindScopedDecisionalCredentialFromHiddenEnv({
+      workContextId,
+      hiddenEnv,
+    }) === "missing_work_context"
+  ) {
+    sendJson(res, 400, {
+      error: {
+        message: "hidden_env.DECISIONAL_TOKEN requires x-openclaw-work-context.",
+        type: "invalid_request_error",
+      },
+    });
+    return true;
+  }
   const commandInput = buildAgentCommandInput({
     prompt: {
       message: prompt.message,
@@ -756,11 +775,12 @@ export async function handleOpenAiHttpRequest(
     },
     modelOverride,
     sessionKey,
+    workContextId,
+    hiddenEnv,
     runId,
     messageChannel,
     abortSignal: abortController.signal,
     senderIsOwner,
-    hiddenEnv: coerceAllowedHiddenEnv(payload.hidden_env),
   });
 
   if (!stream) {
