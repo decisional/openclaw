@@ -327,6 +327,23 @@ export async function startGatewaySidecars(params: {
     scheduleSubagentOrphanRecovery();
   });
 
+  // Mirrors transcript messages into Autodex. Silent no-op when
+  // DECISIONAL_API_URL / DECISIONAL_TOKEN are unset, so self-hosted users
+  // are unaffected. Decisional-provisioned instances pick it up automatically
+  // because those env vars are already injected during provisioning.
+  await measureStartup(params.startupTrace, "sidecars.autodex-sync", async () => {
+    const { startAutodexSync } = await import("../autodex-sync/index.js");
+    const handle = startAutodexSync({
+      logger: {
+        info: (msg) => params.log.warn(msg),
+        warn: (msg) => params.log.warn(msg),
+      },
+    });
+    if (handle.enabled) {
+      params.log.warn("autodex-sync sidecar started");
+    }
+  });
+
   return { pluginServices };
 }
 
