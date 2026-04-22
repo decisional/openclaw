@@ -765,6 +765,7 @@ export async function runEmbeddedAttempt(
       resolveSystemPromptOverride({
         config: params.config,
         agentId: sessionAgentId,
+        extraSystemPrompt: params.extraSystemPrompt,
       }) ??
       buildEmbeddedSystemPrompt({
         workspaceDir: effectiveWorkspace,

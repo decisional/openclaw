@@ -185,6 +185,7 @@ export async function prepareCliRunContext(
     resolveSystemPromptOverride({
       config: params.config,
       agentId: sessionAgentId,
+      extraSystemPrompt,
     }) ??
     buildSystemPrompt({
       workspaceDir,
