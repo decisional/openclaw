@@ -142,7 +142,9 @@ agent turns. Enable the bundled `codex` plugin first, and include `codex` in
 from `openai-codex/*`:
 
 - `openai-codex/*` uses ChatGPT/Codex OAuth through the normal OpenClaw provider
-  path.
+  path by default. The bundled Codex plugin can optionally auto-claim
+  `openai-codex/*` by setting
+  `plugins.entries.codex.config.claimOpenAICodexProvider: true`.
 - `codex/*` uses the bundled Codex provider and routes the turn through Codex
   app-server.
 

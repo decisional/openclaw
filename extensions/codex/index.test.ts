@@ -59,4 +59,18 @@ describe("codex plugin", () => {
       }),
     ).toMatchObject({ supported: false });
   });
+
+  it("can opt in to claiming openai-codex models in auto mode", () => {
+    const harness = createCodexAppServerAgentHarness({
+      pluginConfig: { claimOpenAICodexProvider: true },
+    });
+
+    expect(
+      harness.supports({
+        provider: "openai-codex",
+        modelId: "gpt-5.4",
+        requestedRuntime: "auto",
+      }),
+    ).toMatchObject({ supported: true, priority: 100 });
+  });
 });

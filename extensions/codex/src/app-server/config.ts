@@ -26,6 +26,7 @@ export type CodexAppServerRuntimeOptions = {
 };
 
 export type CodexPluginConfig = {
+  claimOpenAICodexProvider?: boolean;
   discovery?: {
     enabled?: boolean;
     timeoutMs?: number;
@@ -44,6 +45,12 @@ export type CodexPluginConfig = {
     serviceTier?: string;
   };
 };
+
+export const CODEX_PLUGIN_CONFIG_KEYS = [
+  "claimOpenAICodexProvider",
+  "discovery",
+  "appServer",
+] as const;
 
 export const CODEX_APP_SERVER_CONFIG_KEYS = [
   "transport",
@@ -71,6 +78,7 @@ const codexAppServerApprovalsReviewerSchema = z.enum(["user", "guardian_subagent
 
 const codexPluginConfigSchema = z
   .object({
+    claimOpenAICodexProvider: z.boolean().optional(),
     discovery: z
       .object({
         enabled: z.boolean().optional(),

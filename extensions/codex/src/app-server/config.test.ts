@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
   CODEX_APP_SERVER_CONFIG_KEYS,
+  CODEX_PLUGIN_CONFIG_KEYS,
   readCodexPluginConfig,
   resolveCodexAppServerRuntimeOptions,
 } from "./config.js";
@@ -44,11 +45,22 @@ describe("Codex app-server config", () => {
   it("rejects malformed plugin config instead of treating freeform strings as control values", () => {
     expect(
       readCodexPluginConfig({
+        claimOpenAICodexProvider: "yes",
         appServer: {
           approvalPolicy: "always",
         },
       }),
     ).toEqual({});
+  });
+
+  it("parses the openai-codex harness claim flag as a typed boolean", () => {
+    expect(
+      readCodexPluginConfig({
+        claimOpenAICodexProvider: true,
+      }),
+    ).toEqual({
+      claimOpenAICodexProvider: true,
+    });
   });
 
   it("requires a websocket url when websocket transport is configured", () => {
@@ -80,16 +92,19 @@ describe("Codex app-server config", () => {
       await fs.readFile(new URL("../../openclaw.plugin.json", import.meta.url), "utf8"),
     ) as {
       configSchema: {
-        properties: {
+        properties: Record<string, unknown> & {
           appServer: { properties: Record<string, unknown> };
         };
       };
       uiHints: Record<string, unknown>;
     };
+    const manifestRootKeys = Object.keys(manifest.configSchema.properties).toSorted();
     const manifestKeys = Object.keys(
       manifest.configSchema.properties.appServer.properties,
     ).toSorted();
 
+    expect(manifestRootKeys).toEqual([...CODEX_PLUGIN_CONFIG_KEYS].toSorted());
+    expect(manifest.uiHints.claimOpenAICodexProvider).toBeTruthy();
     expect(manifestKeys).toEqual([...CODEX_APP_SERVER_CONFIG_KEYS].toSorted());
     for (const key of CODEX_APP_SERVER_CONFIG_KEYS) {
       expect(manifest.uiHints[`appServer.${key}`]).toBeTruthy();

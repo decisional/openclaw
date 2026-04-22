@@ -18,6 +18,10 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "claimOpenAICodexProvider": {
+        "type": "boolean",
+        "default": false
+      },
       "discovery": {
         "type": "object",
         "additionalProperties": false,
@@ -84,6 +88,10 @@
     }
   },
   "uiHints": {
+    "claimOpenAICodexProvider": {
+      "label": "Claim OpenAI Codex Provider",
+      "help": "When true, the Codex harness can auto-select for openai-codex/* models so ChatGPT/Codex OAuth runs through Codex app-server instead of PI."
+    },
     "discovery": {
       "label": "Model Discovery",
       "help": "Plugin-owned controls for discovering Codex app-server models."

@@ -19,23 +19,28 @@ approvals, media delivery, and the visible transcript mirror.
 
 The harness is off by default. It is selected only when the `codex` plugin is
 enabled and the resolved model is a `codex/*` model, or when you explicitly
-force `embeddedHarness.runtime: "codex"` or `OPENCLAW_AGENT_RUNTIME=codex`.
-If you never configure `codex/*`, existing PI, OpenAI, Anthropic, Gemini, local,
-and custom-provider runs keep their current behavior.
+force `embeddedHarness.runtime: "codex"` or `OPENCLAW_AGENT_RUNTIME=codex`. An
+optional plugin flag can also let it auto-claim `openai-codex/*` models while
+keeping OpenAI Codex OAuth auth profiles. If you never configure `codex/*` or
+that opt-in flag, existing PI, OpenAI, Anthropic, Gemini, local, and
+custom-provider runs keep their current behavior.
 
 ## Pick the right model prefix
 
 OpenClaw has separate routes for OpenAI and Codex-shaped access:
 
-| Model ref              | Runtime path                                 | Use when                                                                |
-| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------- |
-| `openai/gpt-5.4`       | OpenAI provider through OpenClaw/PI plumbing | You want direct OpenAI Platform API access with `OPENAI_API_KEY`.       |
-| `openai-codex/gpt-5.4` | OpenAI Codex OAuth provider through PI       | You want ChatGPT/Codex OAuth without the Codex app-server harness.      |
-| `codex/gpt-5.4`        | Bundled Codex provider plus Codex harness    | You want native Codex app-server execution for the embedded agent turn. |
+| Model ref              | Runtime path                                                                    | Use when                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `openai/gpt-5.4`       | OpenAI provider through OpenClaw/PI plumbing                                    | You want direct OpenAI Platform API access with `OPENAI_API_KEY`.            |
+| `openai-codex/gpt-5.4` | OpenAI Codex OAuth provider through PI by default, or Codex harness with opt-in | You want ChatGPT/Codex OAuth and may also want the Codex app-server harness. |
+| `codex/gpt-5.4`        | Bundled Codex provider plus Codex harness                                       | You want native Codex app-server execution for the embedded agent turn.      |
 
-The Codex harness only claims `codex/*` model refs. Existing `openai/*`,
-`openai-codex/*`, Anthropic, Gemini, xAI, local, and custom provider refs keep
-their normal paths.
+By default, the Codex harness only claims `codex/*` model refs. Existing
+`openai/*`, `openai-codex/*`, Anthropic, Gemini, xAI, local, and custom
+provider refs keep their normal paths. Set
+`plugins.entries.codex.config.claimOpenAICodexProvider: true` when you want
+`openai-codex/*` models to auto-select the Codex harness in `runtime: "auto"`
+mode while still using the `openai-codex:*` auth profiles.
 
 ## Requirements
 
@@ -94,6 +99,40 @@ If your config uses `plugins.allow`, include `codex` there too:
 Setting `agents.defaults.model` or an agent model to `codex/<model>` also
 auto-enables the bundled `codex` plugin. The explicit plugin entry is still
 useful in shared configs because it makes the deployment intent obvious.
+
+## Use Codex OAuth with the Codex harness
+
+If you already use `openai-codex/*` for ChatGPT/Codex OAuth auth profiles and
+want those same models to run through Codex app-server, enable the Codex plugin
+and opt it into claiming the `openai-codex` provider:
+
+```json5
+{
+  plugins: {
+    entries: {
+      codex: {
+        enabled: true,
+        config: {
+          claimOpenAICodexProvider: true,
+        },
+      },
+    },
+  },
+  agents: {
+    defaults: {
+      model: "openai-codex/gpt-5.4",
+      embeddedHarness: {
+        runtime: "auto",
+        fallback: "none",
+      },
+    },
+  },
+}
+```
+
+With this shape, `openai-codex/*` keeps the OpenAI Codex OAuth provider and
+auth-profile ids, but the low-level embedded turn runs through Codex app-server
+instead of PI.
 
 ## Add Codex without replacing other models
 
@@ -477,7 +516,8 @@ OpenClaw may use PI as the compatibility backend. Set
 `embeddedHarness.runtime: "codex"` to force Codex selection while testing, or
 `embeddedHarness.fallback: "none"` to fail when no plugin harness matches. Once
 Codex app-server is selected, its failures surface directly without extra
-fallback config.
+fallback config. For `openai-codex/*` models in `runtime: "auto"` mode, also
+set `plugins.entries.codex.config.claimOpenAICodexProvider: true`.
 
 **The app-server is rejected:** upgrade Codex so the app-server handshake
 reports version `0.118.0` or newer.

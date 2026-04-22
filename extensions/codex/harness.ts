@@ -1,5 +1,6 @@
 import type { AgentHarness } from "openclaw/plugin-sdk/agent-harness";
 import { maybeCompactCodexAppServerSession } from "./src/app-server/compact.js";
+import { readCodexPluginConfig } from "./src/app-server/config.js";
 import { listCodexAppServerModels } from "./src/app-server/models.js";
 import type {
   CodexAppServerListModelsOptions,
@@ -11,6 +12,7 @@ import { clearCodexAppServerBinding } from "./src/app-server/session-binding.js"
 import { clearSharedCodexAppServerClient } from "./src/app-server/shared-client.js";
 
 const DEFAULT_CODEX_HARNESS_PROVIDER_IDS = new Set(["codex"]);
+const OPENAI_CODEX_PROVIDER_ID = "openai-codex";
 
 export type { CodexAppServerListModelsOptions, CodexAppServerModel, CodexAppServerModelListResult };
 export { listCodexAppServerModels };
@@ -22,10 +24,13 @@ export function createCodexAppServerAgentHarness(options?: {
   pluginConfig?: unknown;
 }): AgentHarness {
   const providerIds = new Set(
-    [...(options?.providerIds ?? DEFAULT_CODEX_HARNESS_PROVIDER_IDS)].map((id) =>
-      id.trim().toLowerCase(),
-    ),
+    [...(options?.providerIds ?? DEFAULT_CODEX_HARNESS_PROVIDER_IDS)]
+      .map((id) => id.trim().toLowerCase())
+      .filter(Boolean),
   );
+  if (readCodexPluginConfig(options?.pluginConfig).claimOpenAICodexProvider) {
+    providerIds.add(OPENAI_CODEX_PROVIDER_ID);
+  }
   return {
     id: options?.id ?? "codex",
     label: options?.label ?? "Codex agent harness",
