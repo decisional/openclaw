@@ -71,6 +71,8 @@ export type CronProps = {
   onToggle: (job: CronJob, enabled: boolean) => void;
   onRun: (job: CronJob, mode?: "force" | "due") => void;
   onRemove: (job: CronJob) => void;
+  /** Open the simplified creation wizard. */
+  onQuickCreate?: () => void;
   onLoadRuns: (jobId: string) => void;
   onLoadMoreJobs: () => void;
   onJobsFiltersChange: (patch: {
@@ -432,6 +434,9 @@ export function renderCron(props: CronProps) {
         </div>
       </div>
       <div class="cron-summary-strip__actions">
+        ${props.onQuickCreate
+          ? html` <button class="btn btn--primary" @click=${props.onQuickCreate}>+ New</button> `
+          : nothing}
         <button
           class=${props.loading ? "btn cron-refresh-btn--loading" : "btn"}
           ?disabled=${props.loading}

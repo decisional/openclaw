@@ -8,10 +8,7 @@
  * - Auto-capture filtering
  */
 
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import memoryPlugin, {
   detectCategory,
   formatRelevantMemoriesContext,
@@ -19,6 +16,7 @@ import memoryPlugin, {
   shouldCapture,
 } from "./index.js";
 import { createLanceDbRuntimeLoader, type LanceDbRuntimeLogger } from "./lancedb-runtime.js";
+import { installTmpDirHarness } from "./test-helpers.js";
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
 type MemoryPluginTestConfig = {
@@ -31,6 +29,7 @@ type MemoryPluginTestConfig = {
   captureMaxChars?: number;
   autoCapture?: boolean;
   autoRecall?: boolean;
+  storageOptions?: Record<string, string>;
 };
 
 const TEST_RUNTIME_MANIFEST = {
@@ -49,27 +48,6 @@ type RuntimeManifest = {
   type: "module";
   dependencies: Record<string, string>;
 };
-
-function installTmpDirHarness(params: { prefix: string }) {
-  let tmpDir = "";
-  let dbPath = "";
-
-  beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), params.prefix));
-    dbPath = path.join(tmpDir, "lancedb");
-  });
-
-  afterEach(async () => {
-    if (tmpDir) {
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    }
-  });
-
-  return {
-    getTmpDir: () => tmpDir,
-    getDbPath: () => dbPath,
-  };
-}
 
 function createMockModule(): LanceDbModule {
   return {
@@ -187,6 +165,42 @@ describe("memory plugin e2e", () => {
     expect(config?.autoRecall).toBe(true);
   });
 
+  test("registers auto-recall on before_prompt_build instead of the legacy hook", async () => {
+    const on = vi.fn();
+    const mockApi = {
+      id: "memory-lancedb",
+      name: "Memory (LanceDB)",
+      source: "test",
+      config: {},
+      pluginConfig: {
+        embedding: {
+          apiKey: OPENAI_API_KEY,
+          model: "text-embedding-3-small",
+        },
+        dbPath: getDbPath(),
+        autoCapture: false,
+        autoRecall: true,
+      },
+      runtime: {},
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        debug: vi.fn(),
+      },
+      registerTool: vi.fn(),
+      registerCli: vi.fn(),
+      registerService: vi.fn(),
+      on,
+      resolvePath: (filePath: string) => filePath,
+    };
+
+    memoryPlugin.register(mockApi as any);
+
+    expect(on).toHaveBeenCalledWith("before_prompt_build", expect.any(Function));
+    expect(on).not.toHaveBeenCalledWith("before_agent_start", expect.any(Function));
+  });
+
   test("passes configured dimensions to OpenAI embeddings API", async () => {
     const embeddingsCreate = vi.fn(async () => ({
       data: [{ embedding: [0.1, 0.2, 0.3] }],
@@ -277,6 +291,95 @@ describe("memory plugin e2e", () => {
       vi.doUnmock("./lancedb-runtime.js");
       vi.resetModules();
     }
+  });
+
+  test("config schema accepts storageOptions with string values", async () => {
+    const { default: memoryPlugin } = await import("./index.js");
+
+    const config = memoryPlugin.configSchema?.parse?.({
+      embedding: {
+        apiKey: OPENAI_API_KEY,
+        model: "text-embedding-3-small",
+      },
+      dbPath: getDbPath(),
+      storageOptions: {
+        region: "us-west-2",
+        access_key: "test-key",
+        secret_key: "test-secret",
+      },
+    }) as MemoryPluginTestConfig | undefined;
+
+    expect(config?.storageOptions).toEqual({
+      region: "us-west-2",
+      access_key: "test-key",
+      secret_key: "test-secret",
+    });
+  });
+
+  test("config schema resolves env vars in storageOptions", async () => {
+    const { default: memoryPlugin } = await import("./index.js");
+    process.env.TEST_MEMORY_STORAGE_ACCESS_KEY = "env-access";
+    process.env.TEST_MEMORY_STORAGE_SECRET_KEY = "env-secret";
+
+    try {
+      const config = memoryPlugin.configSchema?.parse?.({
+        embedding: {
+          apiKey: OPENAI_API_KEY,
+          model: "text-embedding-3-small",
+        },
+        dbPath: getDbPath(),
+        storageOptions: {
+          region: "us-west-2",
+          access_key: "${TEST_MEMORY_STORAGE_ACCESS_KEY}",
+          secret_key: "${TEST_MEMORY_STORAGE_SECRET_KEY}",
+        },
+      }) as MemoryPluginTestConfig | undefined;
+
+      expect(config?.storageOptions).toEqual({
+        region: "us-west-2",
+        access_key: "env-access",
+        secret_key: "env-secret",
+      });
+    } finally {
+      delete process.env.TEST_MEMORY_STORAGE_ACCESS_KEY;
+      delete process.env.TEST_MEMORY_STORAGE_SECRET_KEY;
+    }
+  });
+
+  test("config schema rejects missing env vars in storageOptions", async () => {
+    const { default: memoryPlugin } = await import("./index.js");
+    delete process.env.TEST_MEMORY_STORAGE_MISSING;
+
+    expect(() => {
+      memoryPlugin.configSchema?.parse?.({
+        embedding: {
+          apiKey: OPENAI_API_KEY,
+          model: "text-embedding-3-small",
+        },
+        dbPath: getDbPath(),
+        storageOptions: {
+          secret_key: "${TEST_MEMORY_STORAGE_MISSING}",
+        },
+      });
+    }).toThrow("Environment variable TEST_MEMORY_STORAGE_MISSING is not set");
+  });
+
+  test("config schema rejects storageOptions with non-string values", async () => {
+    const { default: memoryPlugin } = await import("./index.js");
+
+    expect(() => {
+      memoryPlugin.configSchema?.parse?.({
+        embedding: {
+          apiKey: OPENAI_API_KEY,
+          model: "text-embedding-3-small",
+        },
+        dbPath: getDbPath(),
+        storageOptions: {
+          region: "us-west-2",
+          timeout: 30, // number, should fail
+        },
+      });
+    }).toThrow("storageOptions.timeout must be a string");
   });
 
   test("shouldCapture applies real capture rules", async () => {

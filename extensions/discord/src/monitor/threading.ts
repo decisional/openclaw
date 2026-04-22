@@ -14,6 +14,7 @@ import {
   truncateUtf16Safe,
 } from "openclaw/plugin-sdk/text-runtime";
 import type { DiscordChannelConfigResolved } from "./allow-list.js";
+import { resolveDiscordChannelNameSafe } from "./channel-access.js";
 import type { DiscordMessageEvent } from "./listeners.js";
 import {
   resolveDiscordChannelInfo,
@@ -207,7 +208,7 @@ export async function resolveDiscordThreadParentInfo(params: {
   if (!parentId) {
     return {};
   }
-  let parentName = threadChannel.parent?.name;
+  let parentName = resolveDiscordChannelNameSafe(threadChannel.parent);
   const parentInfo = await resolveDiscordChannelInfo(client, parentId);
   parentName = parentName ?? parentInfo?.name;
   const parentType = parentInfo?.type;
@@ -379,7 +380,7 @@ export type DiscordAutoThreadContext = {
   To: string;
   OriginatingTo: string;
   SessionKey: string;
-  ParentSessionKey: string;
+  ParentSessionKey?: string;
 };
 
 export function resolveDiscordAutoThreadContext(params: {
@@ -387,6 +388,7 @@ export function resolveDiscordAutoThreadContext(params: {
   channel: string;
   messageChannelId: string;
   createdThreadId?: string | null;
+  inheritParent?: boolean;
 }): DiscordAutoThreadContext | null {
   const createdThreadId = normalizeOptionalStringifiedId(params.createdThreadId) ?? "";
   if (!createdThreadId) {
@@ -402,11 +404,14 @@ export function resolveDiscordAutoThreadContext(params: {
     channel: params.channel,
     peer: { kind: "channel", id: createdThreadId },
   });
-  const parentSessionKey = buildAgentSessionKey({
-    agentId: params.agentId,
-    channel: params.channel,
-    peer: { kind: "channel", id: messageChannelId },
-  });
+  const parentSessionKey =
+    params.inheritParent === true
+      ? buildAgentSessionKey({
+          agentId: params.agentId,
+          channel: params.channel,
+          peer: { kind: "channel", id: messageChannelId },
+        })
+      : undefined;
 
   return {
     createdThreadId,
@@ -414,7 +419,7 @@ export function resolveDiscordAutoThreadContext(params: {
     To: `channel:${createdThreadId}`,
     OriginatingTo: `channel:${createdThreadId}`,
     SessionKey: threadSessionKey,
-    ParentSessionKey: parentSessionKey,
+    ...(parentSessionKey ? { ParentSessionKey: parentSessionKey } : {}),
   };
 }
 
@@ -446,6 +451,7 @@ export async function resolveDiscordAutoThreadReplyPlan(
     agentId: string;
     channel: string;
     cfg?: OpenClawConfig;
+    threadInheritParent?: boolean;
   },
 ): Promise<DiscordAutoThreadReplyPlan> {
   const messageChannelId = resolveTrimmedDiscordMessageChannelId(params);
@@ -481,6 +487,7 @@ export async function resolveDiscordAutoThreadReplyPlan(
         channel: params.channel,
         messageChannelId,
         createdThreadId,
+        inheritParent: params.threadInheritParent,
       })
     : null;
   return { ...deliveryPlan, createdThreadId, autoThreadContext };

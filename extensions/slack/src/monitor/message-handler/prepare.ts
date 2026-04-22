@@ -12,6 +12,7 @@ import {
 import { resolveControlCommandGate } from "openclaw/plugin-sdk/command-auth";
 import { hasControlCommand } from "openclaw/plugin-sdk/command-auth";
 import { shouldHandleTextCommands } from "openclaw/plugin-sdk/command-auth";
+import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import { enqueueSystemEvent } from "openclaw/plugin-sdk/infra-runtime";
 import {
   buildPendingHistoryContextFromMap,
@@ -260,6 +261,7 @@ async function authorizeSlackInboundMessage(params: {
       resolveSenderName: ctx.resolveUserName,
       sendPairingReply: async (text) => {
         await sendMessageSlack(message.channel, text, {
+          cfg: ctx.cfg,
           token: ctx.botToken,
           client: ctx.app.client,
           accountId: account.accountId,
@@ -624,6 +626,7 @@ export async function prepareSlackMessage(params: {
     isBotMessage,
     botToken: ctx.botToken,
     mediaMaxBytes: ctx.mediaMaxBytes,
+    resolveUserName: ctx.resolveUserName,
   });
   if (!resolvedMessageContent) {
     return null;
@@ -673,7 +676,9 @@ export async function prepareSlackMessage(params: {
         }).then(
           () => true,
           (err) => {
-            logVerbose(`slack react failed for channel ${message.channel}: ${String(err)}`);
+            logVerbose(
+              `slack react failed for channel ${message.channel}: ${formatErrorMessage(err)}`,
+            );
             return false;
           },
         )
@@ -810,6 +815,7 @@ export async function prepareSlackMessage(params: {
     ChatType: isDirectMessage ? "direct" : "channel",
     ConversationLabel: envelopeFrom,
     GroupSubject: isRoomish ? roomLabel : undefined,
+    GroupSpace: ctx.teamId || undefined,
     GroupSystemPrompt: groupSystemPrompt,
     UntrustedContext: untrustedChannelMetadata ? [untrustedChannelMetadata] : undefined,
     SenderName: senderName,
@@ -881,7 +887,7 @@ export async function prepareSlackMessage(params: {
     onRecordError: (err) => {
       ctx.logger.warn(
         {
-          error: String(err),
+          error: formatErrorMessage(err),
           storePath,
           sessionKey,
         },

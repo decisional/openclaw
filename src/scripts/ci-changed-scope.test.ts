@@ -76,6 +76,17 @@ describe("detectChangedScope", () => {
       runChangedSmoke: false,
       runControlUiI18n: false,
     });
+    expect(
+      detectChangedScope(["apps/macos-mlx-tts/Sources/OpenClawMLXTTSHelper/main.swift"]),
+    ).toEqual({
+      runNode: false,
+      runMacos: true,
+      runAndroid: false,
+      runWindows: false,
+      runSkillsPython: false,
+      runChangedSmoke: false,
+      runControlUiI18n: false,
+    });
     expect(detectChangedScope(["apps/shared/OpenClawKit/Sources/Foo.swift"])).toEqual({
       runNode: false,
       runMacos: true,
@@ -159,13 +170,13 @@ describe("detectChangedScope", () => {
     });
   });
 
-  it("runs platform lanes when the CI workflow changes", () => {
+  it("keeps native platform lanes scoped when the CI workflow changes", () => {
     expect(detectChangedScope([".github/workflows/ci.yml"])).toEqual({
       runNode: true,
-      runMacos: true,
-      runAndroid: true,
-      runWindows: true,
-      runSkillsPython: true,
+      runMacos: false,
+      runAndroid: false,
+      runWindows: false,
+      runSkillsPython: false,
       runChangedSmoke: false,
       runControlUiI18n: false,
     });
@@ -195,6 +206,33 @@ describe("detectChangedScope", () => {
       runMacos: false,
       runAndroid: false,
       runWindows: false,
+      runSkillsPython: false,
+      runChangedSmoke: true,
+      runControlUiI18n: false,
+    });
+    expect(detectChangedScope(["scripts/e2e/qr-import-docker.sh"])).toEqual({
+      runNode: true,
+      runMacos: false,
+      runAndroid: false,
+      runWindows: true,
+      runSkillsPython: false,
+      runChangedSmoke: true,
+      runControlUiI18n: false,
+    });
+    expect(detectChangedScope(["scripts/postinstall-bundled-plugins.mjs"])).toEqual({
+      runNode: true,
+      runMacos: false,
+      runAndroid: false,
+      runWindows: true,
+      runSkillsPython: false,
+      runChangedSmoke: true,
+      runControlUiI18n: false,
+    });
+    expect(detectChangedScope(["src/plugins/bundled-runtime-deps.ts"])).toEqual({
+      runNode: true,
+      runMacos: false,
+      runAndroid: false,
+      runWindows: true,
       runSkillsPython: false,
       runChangedSmoke: true,
       runControlUiI18n: false,

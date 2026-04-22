@@ -31,10 +31,6 @@ function createOwnerPolicyTools() {
       ownerOnly: true,
       execute: async () => ({ content: [], details: {} }) as any,
     },
-    {
-      name: "whatsapp_login",
-      execute: async () => ({ content: [], details: {} }) as any,
-    },
   ] as unknown as AnyAgentTool[];
 }
 
@@ -75,7 +71,6 @@ describe("tool-policy", () => {
   });
 
   it("identifies owner-only tools", () => {
-    expect(isOwnerOnlyToolName("whatsapp_login")).toBe(true);
     expect(isOwnerOnlyToolName("cron")).toBe(false);
     expect(isOwnerOnlyToolName("gateway")).toBe(true);
     expect(isOwnerOnlyToolName("nodes")).toBe(true);
@@ -83,7 +78,6 @@ describe("tool-policy", () => {
   });
 
   it("exposes stable approval classes for shared owner-only fallbacks", () => {
-    expect(resolveOwnerOnlyToolApprovalClass("whatsapp_login")).toBe("interactive");
     expect(resolveOwnerOnlyToolApprovalClass("cron")).toBeUndefined();
     expect(resolveOwnerOnlyToolApprovalClass("gateway")).toBe("control_plane");
     expect(resolveOwnerOnlyToolApprovalClass("nodes")).toBe("exec_capable");
@@ -99,7 +93,6 @@ describe("tool-policy", () => {
     expect(Object.fromEntries(sharedBackstops)).toEqual({
       gateway: "control_plane",
       nodes: "exec_capable",
-      whatsapp_login: "interactive",
     });
   });
 
@@ -112,7 +105,7 @@ describe("tool-policy", () => {
   it("keeps owner-only tools for the owner sender", async () => {
     const tools = createOwnerPolicyTools();
     const filtered = applyOwnerOnlyToolPolicy(tools, true);
-    expect(filtered.map((t) => t.name)).toEqual(["read", "cron", "gateway", "whatsapp_login"]);
+    expect(filtered.map((t) => t.name)).toEqual(["read", "cron", "gateway"]);
   });
 
   it("honors ownerOnly metadata for custom tool names", async () => {

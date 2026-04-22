@@ -47,6 +47,9 @@ export type CronState = {
   client: GatewayBrowserClient | null;
   connected: boolean;
   cronLoading: boolean;
+  cronQuickCreateOpen: boolean;
+  cronQuickCreateStep: import("../views/cron-quick-create.ts").CronQuickCreateStep;
+  cronQuickCreateDraft: import("../views/cron-quick-create.ts").CronQuickCreateDraft | null;
   cronJobsLoadingMore: boolean;
   cronJobs: CronJob[];
   cronJobsTotal: number;
@@ -601,7 +604,21 @@ export function buildCronPayload(form: CronFormState) {
   return payload;
 }
 
-function buildFailureAlert(form: CronFormState) {
+function normalizePersistedDeliveryChannel(
+  value: string,
+  options: { preserveLastOnUpdate?: boolean } = {},
+) {
+  const channel = value.trim();
+  if (!channel) {
+    return undefined;
+  }
+  if (channel === CRON_CHANNEL_LAST) {
+    return options.preserveLastOnUpdate ? CRON_CHANNEL_LAST : undefined;
+  }
+  return channel;
+}
+
+function buildFailureAlert(form: CronFormState, existingChannel?: string) {
   if (form.failureAlertMode === "disabled") {
     return false as const;
   }
@@ -619,15 +636,15 @@ function buildFailureAlert(form: CronFormState) {
   const accountId = form.failureAlertAccountId.trim();
   const patch: Record<string, unknown> = {
     after: after > 0 ? Math.floor(after) : undefined,
-    channel: form.failureAlertChannel.trim() || CRON_CHANNEL_LAST,
+    channel: normalizePersistedDeliveryChannel(form.failureAlertChannel, {
+      preserveLastOnUpdate: Boolean(existingChannel),
+    }),
     to: form.failureAlertTo.trim() || undefined,
     ...(cooldownMs !== undefined ? { cooldownMs } : {}),
   };
-  // Always include mode and accountId so users can switch/clear them
   if (deliveryMode) {
     patch.mode = deliveryMode;
   }
-  // Include accountId if explicitly set, or send undefined to allow clearing
   patch.accountId = accountId || undefined;
   return patch;
 }
@@ -665,7 +682,9 @@ export async function addCronJob(state: CronState) {
       selectedDeliveryMode === "announce"
         ? {
             mode: selectedDeliveryMode,
-            channel: form.deliveryChannel.trim() || "last",
+            channel: normalizePersistedDeliveryChannel(form.deliveryChannel, {
+              preserveLastOnUpdate: Boolean(editingJob?.delivery?.channel),
+            }),
             to: form.deliveryTo.trim() || undefined,
             accountId: form.deliveryAccountId.trim(),
             bestEffort: form.deliveryBestEffort,
@@ -679,7 +698,12 @@ export async function addCronJob(state: CronState) {
           : selectedDeliveryMode === "agent" || selectedDeliveryMode === "none"
             ? ({ mode: selectedDeliveryMode } as const)
             : undefined;
-    const failureAlert = buildFailureAlert(form);
+    const failureAlert = buildFailureAlert(
+      form,
+      editingJob?.failureAlert && typeof editingJob.failureAlert === "object"
+        ? editingJob.failureAlert.channel
+        : undefined,
+    );
     const agentId = form.clearAgent ? null : form.agentId.trim();
     const sessionKeyRaw = form.sessionKey.trim();
     const sessionKey = sessionKeyRaw || (editingJob?.sessionKey ? null : undefined);

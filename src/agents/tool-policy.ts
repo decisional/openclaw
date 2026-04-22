@@ -32,7 +32,6 @@ function wrapOwnerOnlyToolExecution(tool: AnyAgentTool, senderIsOwner: boolean):
 }
 
 const OWNER_ONLY_TOOL_APPROVAL_CLASS_FALLBACKS = new Map<string, OwnerOnlyToolApprovalClass>([
-  ["whatsapp_login", "interactive"],
   ["gateway", "control_plane"],
   ["nodes", "exec_capable"],
 ]);
