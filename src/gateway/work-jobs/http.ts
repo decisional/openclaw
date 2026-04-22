@@ -6,7 +6,10 @@ import type { ResolvedGatewayAuth } from "../auth.js";
 import { bindScopedDecisionalCredentialFromHiddenEnv } from "../credential-manager.js";
 import { sendInvalidRequest, sendJson, sendMethodNotAllowed, sendText } from "../http-common.js";
 import { handleGatewayPostJsonEndpoint } from "../http-endpoint-helpers.js";
-import { authorizeGatewayHttpRequestOrReply } from "../http-utils.js";
+import {
+  authorizeGatewayHttpRequestOrReply,
+  resolveOpenAiCompatibleHttpOperatorScopes,
+} from "../http-utils.js";
 import { ensureJob, getJobById, requeueFailed } from "./store.js";
 import type { WorkJobRecord } from "./types.js";
 import type { WorkJobWorker } from "./worker.js";
@@ -97,6 +100,13 @@ async function handleCreate(
     allowRealIpFallback: opts.allowRealIpFallback,
     rateLimiter: opts.rateLimiter,
     requiredOperatorMethod: "chat.send",
+    // Work-jobs dispatch is a trusted-operator surface: callers (Autodex's
+    // dispatch worker) authenticate with the shared-secret gateway bearer
+    // token, same contract the OpenAI compat endpoints treat as full
+    // operator access. Without this, the default resolveTrustedHttpOperatorScopes
+    // returns [] for shared-secret auth and the chat.send scope check 403s
+    // every dispatch with "missing scope: operator.write".
+    resolveOperatorScopes: resolveOpenAiCompatibleHttpOperatorScopes,
   });
   if (handled === false) {
     return false;
