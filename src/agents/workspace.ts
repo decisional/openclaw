@@ -39,6 +39,7 @@ const WORKSPACE_STATE_VERSION = 1;
 const workspaceTemplateCache = new Map<string, Promise<string>>();
 let gitAvailabilityPromise: Promise<boolean> | null = null;
 const MAX_WORKSPACE_BOOTSTRAP_FILE_BYTES = 2 * 1024 * 1024;
+const MAX_SESSION_HEADER_READ_BYTES = 4 * 1024;
 
 // File content cache keyed by stable file identity to avoid stale reads.
 const workspaceFileCache = new Map<string, { content: string; identity: string }>();
@@ -208,6 +209,17 @@ function resolveWorkspaceStatePath(dir: string): string {
   return path.join(dir, WORKSPACE_STATE_DIRNAME, WORKSPACE_STATE_FILENAME);
 }
 
+function parseTimestampMs(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw;
+  }
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    return null;
+  }
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 function parseWorkspaceSetupState(raw: string): WorkspaceSetupState | null {
   try {
     const parsed = JSON.parse(raw) as {
@@ -256,6 +268,116 @@ async function readWorkspaceSetupState(statePath: string): Promise<WorkspaceSetu
 async function readWorkspaceSetupStateForDir(dir: string): Promise<WorkspaceSetupState> {
   const statePath = resolveWorkspaceStatePath(resolveUserPath(dir));
   return await readWorkspaceSetupState(statePath);
+}
+
+async function hasWorkspaceUserContentIndicators(dir: string): Promise<boolean> {
+  const indicators = [
+    path.join(dir, "memory"),
+    path.join(dir, DEFAULT_MEMORY_FILENAME),
+    path.join(dir, DEFAULT_MEMORY_ALT_FILENAME),
+    path.join(dir, ".git"),
+  ];
+  for (const indicator of indicators) {
+    try {
+      await fs.access(indicator);
+      return true;
+    } catch {
+      // continue
+    }
+  }
+  return false;
+}
+
+async function readSessionHeaderTimestampMs(sessionFile: string): Promise<number | null> {
+  let handle: fs.FileHandle | null = null;
+  try {
+    handle = await fs.open(sessionFile, "r");
+    const buffer = Buffer.allocUnsafe(MAX_SESSION_HEADER_READ_BYTES);
+    const { bytesRead } = await handle.read(buffer, 0, MAX_SESSION_HEADER_READ_BYTES, 0);
+    if (bytesRead <= 0) {
+      return null;
+    }
+    const chunk = buffer.toString("utf-8", 0, bytesRead);
+    const newlineIndex = chunk.indexOf("\n");
+    const firstLine = (newlineIndex === -1 ? chunk : chunk.slice(0, newlineIndex)).trim();
+    if (!firstLine) {
+      return null;
+    }
+    const parsed = JSON.parse(firstLine) as { timestamp?: unknown };
+    return parseTimestampMs(parsed.timestamp);
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+async function hasPersistedSessionTranscript(params: {
+  dir: string;
+  olderThanMs?: number;
+}): Promise<boolean> {
+  const stateDir = path.dirname(params.dir);
+  try {
+    const matches = fs.glob("agents/*/sessions/*.jsonl", { cwd: stateDir });
+    for await (const match of matches) {
+      const headerTimestampMs = await readSessionHeaderTimestampMs(path.join(stateDir, match));
+      if (headerTimestampMs === null) {
+        continue;
+      }
+      if (
+        typeof params.olderThanMs !== "number" ||
+        !Number.isFinite(params.olderThanMs) ||
+        headerTimestampMs < params.olderThanMs
+      ) {
+        return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+async function workspaceShowsCompletedSetupEvidence(params: {
+  dir: string;
+  identityPath: string;
+  userPath: string;
+  identityTemplate: string;
+  userTemplate: string;
+  priorSessionOlderThanMs?: number;
+}): Promise<boolean> {
+  const [identityContent, userContent, hasUserContent] = await Promise.all([
+    fs.readFile(params.identityPath, "utf-8"),
+    fs.readFile(params.userPath, "utf-8"),
+    hasWorkspaceUserContentIndicators(params.dir),
+  ]);
+  if (
+    identityContent !== params.identityTemplate ||
+    userContent !== params.userTemplate ||
+    hasUserContent
+  ) {
+    return true;
+  }
+  return await hasPersistedSessionTranscript({
+    dir: params.dir,
+    olderThanMs: params.priorSessionOlderThanMs,
+  });
+}
+
+async function resolveBootstrapReferenceTimestampMs(
+  state: WorkspaceSetupState,
+  bootstrapPath: string,
+): Promise<number | null> {
+  const seededAtMs = parseTimestampMs(state.bootstrapSeededAt);
+  if (seededAtMs !== null) {
+    return seededAtMs;
+  }
+  try {
+    const stat = await fs.stat(bootstrapPath);
+    return stat.mtimeMs;
+  } catch {
+    return null;
+  }
 }
 
 export async function isWorkspaceSetupCompleted(dir: string): Promise<boolean> {
@@ -370,13 +492,22 @@ export async function ensureAgentWorkspace(params?: {
   const statePath = resolveWorkspaceStatePath(dir);
 
   const isBrandNewWorkspace = await (async () => {
-    const templatePaths = [agentsPath, soulPath, toolsPath, identityPath, userPath, heartbeatPath];
+    const scaffoldPaths = [
+      agentsPath,
+      soulPath,
+      toolsPath,
+      identityPath,
+      userPath,
+      heartbeatPath,
+      bootstrapPath,
+    ];
     const userContentPaths = [
       path.join(dir, "memory"),
       path.join(dir, DEFAULT_MEMORY_FILENAME),
+      path.join(dir, DEFAULT_MEMORY_ALT_FILENAME),
       path.join(dir, ".git"),
     ];
-    const paths = [...templatePaths, ...userContentPaths];
+    const paths = [...scaffoldPaths, ...userContentPaths];
     const existing = await Promise.all(
       paths.map(async (p) => {
         try {
@@ -412,6 +543,31 @@ export async function ensureAgentWorkspace(params?: {
   const nowIso = () => new Date().toISOString();
 
   let bootstrapExists = await fileExists(bootstrapPath);
+  if (bootstrapExists && !state.setupCompletedAt) {
+    const bootstrapTemplate = await loadTemplate(DEFAULT_BOOTSTRAP_FILENAME);
+    const bootstrapContent = await fs.readFile(bootstrapPath, "utf-8").catch(() => null);
+    if (bootstrapContent === bootstrapTemplate) {
+      const bootstrapReferenceMs = await resolveBootstrapReferenceTimestampMs(state, bootstrapPath);
+      const legacySetupCompleted = await workspaceShowsCompletedSetupEvidence({
+        dir,
+        identityPath,
+        userPath,
+        identityTemplate,
+        userTemplate,
+        priorSessionOlderThanMs: bootstrapReferenceMs ?? undefined,
+      });
+      if (legacySetupCompleted) {
+        await fs.unlink(bootstrapPath).catch((err) => {
+          const anyErr = err as { code?: string };
+          if (anyErr.code !== "ENOENT") {
+            throw err;
+          }
+        });
+        bootstrapExists = false;
+        markState({ setupCompletedAt: nowIso() });
+      }
+    }
+  }
   if (!state.bootstrapSeededAt && bootstrapExists) {
     markState({ bootstrapSeededAt: nowIso() });
   }
@@ -421,31 +577,13 @@ export async function ensureAgentWorkspace(params?: {
   }
 
   if (!state.bootstrapSeededAt && !state.setupCompletedAt && !bootstrapExists) {
-    // Legacy migration path: if USER/IDENTITY diverged from templates, or if user-content
-    // indicators exist, treat setup as complete and avoid recreating BOOTSTRAP for
-    // already-configured workspaces.
-    const [identityContent, userContent] = await Promise.all([
-      fs.readFile(identityPath, "utf-8"),
-      fs.readFile(userPath, "utf-8"),
-    ]);
-    const hasUserContent = await (async () => {
-      const indicators = [
-        path.join(dir, "memory"),
-        path.join(dir, DEFAULT_MEMORY_FILENAME),
-        path.join(dir, ".git"),
-      ];
-      for (const indicator of indicators) {
-        try {
-          await fs.access(indicator);
-          return true;
-        } catch {
-          // continue
-        }
-      }
-      return false;
-    })();
-    const legacySetupCompleted =
-      identityContent !== identityTemplate || userContent !== userTemplate || hasUserContent;
+    const legacySetupCompleted = await workspaceShowsCompletedSetupEvidence({
+      dir,
+      identityPath,
+      userPath,
+      identityTemplate,
+      userTemplate,
+    });
     if (legacySetupCompleted) {
       markState({ setupCompletedAt: nowIso() });
     } else {

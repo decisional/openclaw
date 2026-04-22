@@ -47,6 +47,46 @@ async function readWorkspaceState(dir: string): Promise<{
   };
 }
 
+async function makeDefaultHomeWorkspace(): Promise<string> {
+  const homeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-home-"));
+  const workspaceDir = path.join(homeRoot, ".openclaw", "workspace");
+  await fs.mkdir(workspaceDir, { recursive: true });
+  return workspaceDir;
+}
+
+async function writeSessionTranscriptHeader(params: {
+  workspaceDir: string;
+  timestamp: string;
+  sessionId?: string;
+}) {
+  const sessionId = params.sessionId ?? "existing-session";
+  const sessionDir = path.join(path.dirname(params.workspaceDir), "agents", "main", "sessions");
+  await fs.mkdir(sessionDir, { recursive: true });
+  await fs.writeFile(
+    path.join(sessionDir, `${sessionId}.jsonl`),
+    `${JSON.stringify({
+      type: "session",
+      version: 1,
+      id: sessionId,
+      timestamp: params.timestamp,
+      cwd: params.workspaceDir,
+    })}\n`,
+    "utf-8",
+  );
+}
+
+async function makeLegacyTemplateWorkspace(): Promise<string> {
+  const workspaceDir = await makeDefaultHomeWorkspace();
+  await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: true });
+  await fs.rm(path.join(workspaceDir, DEFAULT_BOOTSTRAP_FILENAME), { force: true });
+  await fs.rm(path.join(workspaceDir, WORKSPACE_STATE_PATH_SEGMENTS[0]), {
+    recursive: true,
+    force: true,
+  });
+  await fs.rm(path.join(workspaceDir, ".git"), { recursive: true, force: true });
+  return workspaceDir;
+}
+
 async function expectBootstrapSeeded(dir: string) {
   await expect(fs.access(path.join(dir, DEFAULT_BOOTSTRAP_FILENAME))).resolves.toBeUndefined();
   const state = await readWorkspaceState(dir);
@@ -126,6 +166,19 @@ describe("ensureAgentWorkspace", () => {
     expect(state.setupCompletedAt).toMatch(/\d{4}-\d{2}-\d{2}T/);
   });
 
+  it("does not re-seed BOOTSTRAP.md for template-only workspaces with persisted sessions", async () => {
+    const workspaceDir = await makeLegacyTemplateWorkspace();
+    await writeSessionTranscriptHeader({
+      workspaceDir,
+      timestamp: "2026-04-22T17:45:37.000Z",
+    });
+
+    await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: true });
+
+    await expectCompletedWithoutBootstrap(workspaceDir);
+    expect((await readWorkspaceState(workspaceDir)).bootstrapSeededAt).toBeUndefined();
+  });
+
   it("treats memory-backed workspaces as existing even when template files are missing", async () => {
     const tempDir = await makeTempWorkspace("openclaw-workspace-");
     await fs.mkdir(path.join(tempDir, "memory"), { recursive: true });
@@ -183,6 +236,61 @@ describe("ensureAgentWorkspace", () => {
 
     await expect(resolveWorkspaceBootstrapStatus(tempDir)).resolves.toBe("pending");
     await expect(isWorkspaceBootstrapPending(tempDir)).resolves.toBe(true);
+  });
+
+  it("repairs retro-seeded BOOTSTRAP.md when persisted sessions predate the seed marker", async () => {
+    const workspaceDir = await makeDefaultHomeWorkspace();
+
+    await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: true });
+    await fs.rm(path.join(workspaceDir, ".git"), { recursive: true, force: true });
+    await fs.writeFile(
+      path.join(workspaceDir, ...WORKSPACE_STATE_PATH_SEGMENTS),
+      `${JSON.stringify(
+        {
+          version: 1,
+          bootstrapSeededAt: "2026-04-22T21:45:15.000Z",
+        },
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    );
+    await writeSessionTranscriptHeader({
+      workspaceDir,
+      timestamp: "2026-04-22T17:45:37.000Z",
+    });
+
+    await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: true });
+
+    await expectCompletedWithoutBootstrap(workspaceDir);
+  });
+
+  it("keeps BOOTSTRAP.md pending when persisted sessions start after the seed marker", async () => {
+    const workspaceDir = await makeDefaultHomeWorkspace();
+
+    await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: true });
+    await fs.rm(path.join(workspaceDir, ".git"), { recursive: true, force: true });
+    await fs.writeFile(
+      path.join(workspaceDir, ...WORKSPACE_STATE_PATH_SEGMENTS),
+      `${JSON.stringify(
+        {
+          version: 1,
+          bootstrapSeededAt: "2026-04-22T21:45:15.000Z",
+        },
+        null,
+        2,
+      )}\n`,
+      "utf-8",
+    );
+    await writeSessionTranscriptHeader({
+      workspaceDir,
+      timestamp: "2026-04-22T21:52:24.000Z",
+    });
+
+    await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: true });
+
+    await expectBootstrapSeeded(workspaceDir);
+    await expect(resolveWorkspaceBootstrapStatus(workspaceDir)).resolves.toBe("pending");
   });
 
   it("reports bootstrap complete once BOOTSTRAP.md is deleted and completion is recorded", async () => {
