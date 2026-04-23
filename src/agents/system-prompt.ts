@@ -11,10 +11,6 @@ import {
 } from "../shared/string-coerce.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
 import type { BootstrapMode } from "./bootstrap-mode.js";
-import {
-  buildFullBootstrapPromptLines,
-  buildLimitedBootstrapPromptLines,
-} from "./bootstrap-prompt.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
 import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import type {
@@ -186,32 +182,15 @@ function buildMemorySection(params: {
   });
 }
 
-export function buildAgentUserPromptPrefix(params: {
+// Decisional fork: the user-message bootstrap prefix is disabled. We do not
+// run the BOOTSTRAP.md onboarding ritual in our deployment, and the upstream
+// prefix was blocking agents from replying to every user message when a
+// legacy BOOTSTRAP.md was still on disk. Always returning undefined means
+// no "[Bootstrap pending] ..." block ever gets prepended to the user's input.
+export function buildAgentUserPromptPrefix(_params: {
   bootstrapMode?: BootstrapMode;
 }): string | undefined {
-  if (!params.bootstrapMode || params.bootstrapMode === "none") {
-    return undefined;
-  }
-  if (params.bootstrapMode === "limited") {
-    return [
-      "[Bootstrap pending]",
-      ...buildLimitedBootstrapPromptLines({
-        introLine:
-          "Bootstrap is still pending for this workspace, but this run cannot safely complete the full BOOTSTRAP.md workflow here.",
-        nextStepLine:
-          "Typical next steps include switching to a primary interactive run with normal workspace access or having the user complete the canonical BOOTSTRAP.md deletion afterward.",
-      }),
-    ].join("\n");
-  }
-  return [
-    "[Bootstrap pending]",
-    ...buildFullBootstrapPromptLines({
-      readLine:
-        "Please read BOOTSTRAP.md from the workspace and follow it before replying normally.",
-      firstReplyLine:
-        "Your first user-visible reply for a bootstrap-pending workspace must follow BOOTSTRAP.md, not a generic greeting.",
-    }),
-  ].join("\n");
+  return undefined;
 }
 
 function buildUserIdentitySection(ownerLine: string | undefined, isMinimal: boolean) {
