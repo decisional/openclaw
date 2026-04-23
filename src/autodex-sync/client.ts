@@ -11,7 +11,7 @@ export type AutodexPostResult =
   | { ok: false; retryable: boolean; status?: number; error: string };
 
 /**
- * Thin HTTP client for POST /v1/openclaw/events/ingest. Kept free of the
+ * Thin HTTP client for POST /api/v1/openclaw/events/ingest. Kept free of the
  * store / listener so unit tests can exercise it with a mock fetch and so the
  * backfill CLI can reuse it without going through the persisted queue.
  *
@@ -25,7 +25,7 @@ export async function postIngest(
   request: AutodexIngestRequest,
   fetchFn: typeof fetch = fetch,
 ): Promise<AutodexPostResult> {
-  const url = joinUrl(cfg.apiUrl, "/v1/openclaw/events/ingest");
+  const url = joinUrl(cfg.apiUrl, "/api/v1/openclaw/events/ingest");
   const timeoutMs = cfg.requestTimeoutMs ?? 15_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
