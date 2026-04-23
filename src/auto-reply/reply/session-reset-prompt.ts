@@ -1,39 +1,16 @@
 import { resolveBootstrapMode, type BootstrapMode } from "../../agents/bootstrap-mode.js";
-import {
-  buildFullBootstrapPromptLines,
-  buildLimitedBootstrapPromptLines,
-} from "../../agents/bootstrap-prompt.js";
 import { appendCronStyleCurrentTimeLine } from "../../agents/current-time.js";
 import { resolveEffectiveToolInventory } from "../../agents/tools-effective-inventory.js";
 import { isWorkspaceBootstrapPending } from "../../agents/workspace.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 
+// Decisional fork: BOOTSTRAP.md is not part of our deployment model, and
+// daily /new and /reset events at 04:00 kept re-anchoring agents on a
+// bootstrap ritual that must not run here. The base reset prompt no longer
+// references BOOTSTRAP.md, and the pending/limited variants are gone — reset
+// always delivers the base prompt regardless of bootstrapMode.
 const BARE_SESSION_RESET_PROMPT_BASE =
-  "A new session was started via /new or /reset. Execute your Session Startup sequence now - read the required files before responding to the user. If BOOTSTRAP.md exists in the provided Project Context, read it and follow its instructions first. Then greet the user in your configured persona, if one is provided. Be yourself - use your defined voice, mannerisms, and mood. Keep it to 1-3 sentences and ask what they want to do. If the runtime model differs from default_model in the system prompt, mention the default model. Do not mention internal steps, files, tools, or reasoning.";
-
-const BARE_SESSION_RESET_PROMPT_BOOTSTRAP_PENDING = [
-  "A new session was started via /new or /reset while bootstrap is still pending for this workspace.",
-  ...buildFullBootstrapPromptLines({
-    readLine:
-      "Please read BOOTSTRAP.md from the workspace now and follow it before replying normally.",
-    firstReplyLine:
-      "Your first user-visible reply must follow BOOTSTRAP.md, not a generic greeting.",
-  }),
-  "If the runtime model differs from default_model in the system prompt, mention the default model only after handling BOOTSTRAP.md.",
-  "Do not mention internal steps, files, tools, or reasoning.",
-].join(" ");
-
-const BARE_SESSION_RESET_PROMPT_BOOTSTRAP_LIMITED = [
-  "A new session was started via /new or /reset while bootstrap is still pending for this workspace, but this run cannot safely complete the full BOOTSTRAP.md workflow here.",
-  ...buildLimitedBootstrapPromptLines({
-    introLine:
-      "Bootstrap is still pending for this workspace, but this run cannot safely complete the full BOOTSTRAP.md workflow here.",
-    nextStepLine:
-      "Typical next steps include switching to a primary interactive run with normal workspace access or having the user complete the canonical BOOTSTRAP.md deletion afterward.",
-  }).slice(1),
-  "If the runtime model differs from default_model in the system prompt, mention the default model only after you have handled this limitation.",
-  "Do not mention internal steps, files, tools, or reasoning.",
-].join(" ");
+  "A new session was started via /new or /reset. Execute your Session Startup sequence now - read the required files before responding to the user. Then greet the user in your configured persona, if one is provided. Be yourself - use your defined voice, mannerisms, and mood. Keep it to 1-3 sentences and ask what they want to do. If the runtime model differs from default_model in the system prompt, mention the default model. Do not mention internal steps, files, tools, or reasoning.";
 
 export function resolveBareResetBootstrapFileAccess(params: {
   cfg?: OpenClawConfig;
@@ -100,14 +77,12 @@ export async function resolveBareSessionResetPromptState(params: {
 export function buildBareSessionResetPrompt(
   cfg?: OpenClawConfig,
   nowMs?: number,
-  bootstrapMode?: BootstrapMode,
+  _bootstrapMode?: BootstrapMode,
 ): string {
+  // _bootstrapMode is kept in the signature for API compatibility but no
+  // longer influences the prompt: see top-of-file note.
   return appendCronStyleCurrentTimeLine(
-    bootstrapMode === "full"
-      ? BARE_SESSION_RESET_PROMPT_BOOTSTRAP_PENDING
-      : bootstrapMode === "limited"
-        ? BARE_SESSION_RESET_PROMPT_BOOTSTRAP_LIMITED
-        : BARE_SESSION_RESET_PROMPT_BASE,
+    BARE_SESSION_RESET_PROMPT_BASE,
     cfg ?? {},
     nowMs ?? Date.now(),
   );
