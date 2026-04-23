@@ -199,4 +199,39 @@ describe("resolveSlackThreadContextData", () => {
     expect(result.threadHistoryBody).toContain("allowed follow-up");
     expect(result.threadHistoryBody).not.toContain("self starter");
   });
+
+  it("drops thread history messages containing upstream bootstrap-pending wording", async () => {
+    const { result } = await resolveAllowlistedThreadContext({
+      repliesMessages: [
+        // Stale bot message from a prior provisioning, authored by a bot id
+        // that is NOT the current bot — survives the current-bot filter and
+        // would otherwise land in model context as assistant history.
+        {
+          text: "[Bootstrap pending] Please read BOOTSTRAP.md and follow it before replying normally.",
+          bot_id: "B_PREV",
+          ts: "100.100",
+        },
+        { text: "real follow-up", user: "U1", ts: "100.800" },
+        // User quoting the pollution back at the bot — classic re-anchor vector.
+        {
+          text: "what does this BOOTSTRAP.md thing mean?",
+          user: "U1",
+          ts: "100.900",
+        },
+        { text: "current message", user: "U1", ts: "101.000" },
+      ],
+      threadStarter: {
+        text: "real starter",
+        userId: "U1",
+        ts: "100.000",
+      },
+      allowFromLower: ["u1"],
+      allowNameMatching: false,
+    });
+
+    expect(result.threadHistoryBody).toContain("real follow-up");
+    expect(result.threadHistoryBody).not.toContain("Bootstrap pending");
+    expect(result.threadHistoryBody).not.toContain("BOOTSTRAP.md");
+    expect(result.threadHistoryBody).not.toContain("Please read BOOTSTRAP");
+  });
 });
