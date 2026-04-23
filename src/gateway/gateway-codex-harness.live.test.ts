@@ -39,7 +39,7 @@ const CODEX_HARNESS_AUTH_MODE =
 const describeLive = LIVE && CODEX_HARNESS_LIVE ? describe : describe.skip;
 const describeDisabled = LIVE && !CODEX_HARNESS_LIVE ? describe : describe.skip;
 const CODEX_HARNESS_TIMEOUT_MS = 420_000;
-const DEFAULT_CODEX_MODEL = "codex/gpt-5.4";
+const DEFAULT_CODEX_MODEL = "codex/gpt-5.5";
 const GATEWAY_CONNECT_TIMEOUT_MS = 60_000;
 
 type EnvSnapshot = {
@@ -155,6 +155,7 @@ async function writeLiveGatewayConfig(params: {
         skipBootstrap: true,
         model: { primary: params.modelKey },
         models: { [params.modelKey]: {} },
+        thinkingDefault: "medium",
         sandbox: { mode: "off" },
       },
     },
@@ -176,7 +177,7 @@ async function requestAgentText(params: {
       idempotencyKey: `idem-${randomUUID()}`,
       message: params.message,
       deliver: false,
-      thinking: "low",
+      thinking: "medium",
     },
     { expectFinal: true },
   );
@@ -203,7 +204,7 @@ async function requestCodexCommandText(params: {
       idempotencyKey: `idem-${randomUUID()}-codex-command`,
       message: params.command,
       deliver: false,
-      thinking: "low",
+      thinking: "medium",
     },
     { expectFinal: true },
   );

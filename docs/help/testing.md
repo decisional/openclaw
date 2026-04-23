@@ -603,14 +603,14 @@ Docker notes:
   `agent` method:
   - load the bundled `codex` plugin
   - select `OPENCLAW_AGENT_RUNTIME=codex`
-  - send a first gateway agent turn to `codex/gpt-5.4`
+  - send a first gateway agent turn to `codex/gpt-5.5` with medium thinking
   - send a second turn to the same OpenClaw session and verify the app-server
     thread can resume
   - run `/codex status` and `/codex models` through the same gateway command
     path
 - Test: `src/gateway/gateway-codex-harness.live.test.ts`
 - Enable: `OPENCLAW_LIVE_CODEX_HARNESS=1`
-- Default model: `codex/gpt-5.4`
+- Default model: `codex/gpt-5.5`
 - Optional image probe: `OPENCLAW_LIVE_CODEX_HARNESS_IMAGE_PROBE=1`
 - Optional MCP/tool probe: `OPENCLAW_LIVE_CODEX_HARNESS_MCP_PROBE=1`
 - The smoke sets `OPENCLAW_AGENT_HARNESS_FALLBACK=none` so a broken Codex
@@ -625,7 +625,7 @@ source ~/.profile
 OPENCLAW_LIVE_CODEX_HARNESS=1 \
   OPENCLAW_LIVE_CODEX_HARNESS_IMAGE_PROBE=1 \
   OPENCLAW_LIVE_CODEX_HARNESS_MCP_PROBE=1 \
-  OPENCLAW_LIVE_CODEX_HARNESS_MODEL=codex/gpt-5.4 \
+  OPENCLAW_LIVE_CODEX_HARNESS_MODEL=codex/gpt-5.5 \
   pnpm test:live -- src/gateway/gateway-codex-harness.live.test.ts
 ```
 
