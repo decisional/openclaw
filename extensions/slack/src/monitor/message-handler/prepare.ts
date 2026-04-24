@@ -65,7 +65,10 @@ import { resolveSlackThreadContextData } from "./prepare-thread-context.js";
 import type { PreparedSlackMessage } from "./types.js";
 
 const mentionRegexCache = new WeakMap<SlackMonitorContext, Map<string, RegExp[]>>();
-const DEFAULT_SESSION_RESET_TRIGGERS = ["/new", "/reset"];
+// Keep in sync with DEFAULT_RESET_TRIGGERS in src/config/sessions/types.ts —
+// Slack's native slash-command UI intercepts `/`, so `!new` / `!reset` give
+// channel users a working default without overriding session.resetTriggers.
+const DEFAULT_SESSION_RESET_TRIGGERS = ["/new", "/reset", "!new", "!reset"];
 
 function matchesSlackSessionResetTrigger(text: string, cfg: SlackMonitorContext["cfg"]): boolean {
   const normalized = normalizeLowercaseStringOrEmpty(text);

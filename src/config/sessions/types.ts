@@ -503,5 +503,8 @@ export type SessionSystemPromptReport = {
 };
 
 export const DEFAULT_RESET_TRIGGER = "/new";
-export const DEFAULT_RESET_TRIGGERS = ["/new", "/reset"];
+// `!new` / `!reset` exist alongside the slash variants so channels whose UI
+// intercepts `/` as a native slash command (Slack in particular) still have a
+// working default reset keyword.
+export const DEFAULT_RESET_TRIGGERS = ["/new", "/reset", "!new", "!reset"];
 export const DEFAULT_IDLE_MINUTES = 0;
