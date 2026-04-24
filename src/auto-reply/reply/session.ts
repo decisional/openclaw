@@ -92,7 +92,15 @@ function stripThreadIdFromOrigin(origin: SessionEntry["origin"]): SessionEntry["
 function resolveExplicitSessionEndReason(
   matchedResetTriggerLower?: string,
 ): PluginHookSessionEndReason {
-  return matchedResetTriggerLower === "/reset" ? "reset" : "new";
+  // Covers both the stock slash triggers (`/reset`) and channel-specific
+  // plain-text variants routed through `session.resetTriggers` (e.g. `RESET`,
+  // `!reset`) — any trigger whose normalized form contains "reset" ends the
+  // session under the "reset" reason; everything else (including `/new`,
+  // `!new`, `NEW`) falls through to "new".
+  if (!matchedResetTriggerLower) {
+    return "new";
+  }
+  return matchedResetTriggerLower.includes("reset") ? "reset" : "new";
 }
 
 function resolveSessionDefaultAccountId(params: {
@@ -161,6 +169,11 @@ export type SessionInitResult = {
   isGroup: boolean;
   bodyStripped?: string;
   triggerBodyNormalized: string;
+  // Normalized form of the `session.resetTriggers` entry that fired this
+  // reset (empty when no reset was triggered). Downstream consumers such as
+  // `get-reply.ts` use it to derive the hook action for plain-text triggers
+  // that don't start with `/`.
+  matchedResetTriggerLower?: string;
 };
 
 function isResetAuthorizedForContext(params: { ctx: MsgContext }): boolean {
@@ -890,5 +903,6 @@ export async function initSessionState(params: {
     isGroup,
     bodyStripped,
     triggerBodyNormalized,
+    matchedResetTriggerLower,
   };
 }

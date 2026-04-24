@@ -912,6 +912,29 @@ export async function prepareSlackMessage(params: {
     logVerbose(`slack inbound: channel=${message.channel} from=${slackFrom} preview="${preview}"`);
   }
 
+  // Deterministic, pre-LLM acknowledgement for `session.resetTriggers`
+  // matches. Fired here (after all authorization gates) so we only post when
+  // the trigger is actually going to reset the session, and only when the
+  // sender is allowed to run control commands. Threaded to the incoming
+  // message so the ACK lands in the conversation that triggered it. Errors
+  // are logged and swallowed — the reset itself must still run if the ack
+  // post fails.
+  if (isSessionResetTrigger && (isDirectMessage || commandAuthorized)) {
+    const ackThreadTs = isDirectMessage ? undefined : (message.thread_ts ?? message.ts);
+    void sendMessageSlack(message.channel, "ACK. RESETTING", {
+      cfg: ctx.cfg,
+      token: ctx.botToken,
+      client: ctx.app.client,
+      accountId: account.accountId,
+      threadTs: ackThreadTs,
+    }).catch((err) => {
+      ctx.logger.warn(
+        { error: formatErrorMessage(err), channel: message.channel },
+        "slack: failed to post session-reset ACK",
+      );
+    });
+  }
+
   return {
     ctx,
     account,
