@@ -292,6 +292,7 @@ export async function getReplyFromConfig(
     isGroup,
     triggerBodyNormalized,
     bodyStripped,
+    matchedResetTriggerLower,
   } = sessionState;
   if (resetTriggered && normalizeOptionalString(bodyStripped)) {
     const { applyResetModelOverride } = await loadSessionResetModelRuntime();
@@ -498,12 +499,28 @@ export async function getReplyFromConfig(
     if (!resetTriggered || !command.isAuthorizedSender || command.resetHookTriggered) {
       return;
     }
-    const resetMatch = command.commandBodyNormalized.match(/^\/(new|reset)(?:\s|$)/);
-    if (!resetMatch) {
+    // Previously gated on `^\/(new|reset)(?:\s|$)` — that prevented
+    // `before_reset` hooks (e.g. session-memory summarization) from firing when
+    // the reset was triggered by a plain-text `session.resetTriggers` keyword
+    // such as `RESET`, `!reset`, or any channel-specific alias that skips the
+    // slash prefix. Derive the hook action from the matched trigger instead,
+    // falling back to the slash-regex extraction for historic safety.
+    const triggerLower = matchedResetTriggerLower ?? "";
+    let action: ResetCommandAction | undefined;
+    if (triggerLower.includes("reset")) {
+      action = "reset";
+    } else if (triggerLower.includes("new")) {
+      action = "new";
+    } else {
+      const resetMatch = command.commandBodyNormalized.match(/^\/(new|reset)(?:\s|$)/);
+      if (resetMatch) {
+        action = resetMatch[1] === "reset" ? "reset" : "new";
+      }
+    }
+    if (!action) {
       return;
     }
     const { emitResetCommandHooks } = await loadCommandsCoreRuntime();
-    const action: ResetCommandAction = resetMatch[1] === "reset" ? "reset" : "new";
     await emitResetCommandHooks({
       action,
       ctx,
