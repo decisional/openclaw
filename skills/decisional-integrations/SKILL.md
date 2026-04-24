@@ -13,10 +13,10 @@ metadata:
               "kind": "node",
               "package": "@decisional/cli",
               "bins": ["decisional"],
-              "label": "Install Decisional CLI",
-            },
-          ],
-      },
+              "label": "Install Decisional CLI"
+            }
+          ]
+      }
   }
 ---
 
