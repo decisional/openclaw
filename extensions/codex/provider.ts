@@ -1,4 +1,3 @@
-import type { ProviderRuntimeModel } from "openclaw/plugin-sdk/plugin-entry";
 import {
   normalizeModelCompat,
   type ModelDefinitionConfig,
@@ -23,6 +22,10 @@ const DEFAULT_CONTEXT_WINDOW = 272_000;
 const DEFAULT_MAX_TOKENS = 128_000;
 const DEFAULT_DISCOVERY_TIMEOUT_MS = 2500;
 const LIVE_DISCOVERY_ENV = "OPENCLAW_CODEX_DISCOVERY_LIVE";
+const CODEX_GPT_55_MODEL_ID = "gpt-5.5";
+const CODEX_GPT_54_MODEL_ID = "gpt-5.4";
+const CODEX_GPT_54_MINI_MODEL_ID = "gpt-5.4-mini";
+const CODEX_GPT_52_MODEL_ID = "gpt-5.2";
 
 type CodexModelLister = (options: {
   timeoutMs: number;
@@ -44,26 +47,34 @@ type BuildCatalogOptions = {
 
 const FALLBACK_CODEX_MODELS = [
   {
-    id: "gpt-5.4",
-    model: "gpt-5.4",
-    displayName: "gpt-5.4",
+    id: CODEX_GPT_55_MODEL_ID,
+    model: CODEX_GPT_55_MODEL_ID,
+    displayName: CODEX_GPT_55_MODEL_ID,
     description: "Latest frontier agentic coding model.",
     isDefault: true,
     inputModalities: ["text", "image"],
     supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
   },
   {
-    id: "gpt-5.4-mini",
-    model: "gpt-5.4-mini",
+    id: CODEX_GPT_54_MODEL_ID,
+    model: CODEX_GPT_54_MODEL_ID,
+    displayName: CODEX_GPT_54_MODEL_ID,
+    description: "Previous frontier agentic coding model.",
+    inputModalities: ["text", "image"],
+    supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
+  },
+  {
+    id: CODEX_GPT_54_MINI_MODEL_ID,
+    model: CODEX_GPT_54_MINI_MODEL_ID,
     displayName: "GPT-5.4-Mini",
     description: "Smaller frontier agentic coding model.",
     inputModalities: ["text", "image"],
     supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
   },
   {
-    id: "gpt-5.2",
-    model: "gpt-5.2",
-    displayName: "gpt-5.2",
+    id: CODEX_GPT_52_MODEL_ID,
+    model: CODEX_GPT_52_MODEL_ID,
+    displayName: CODEX_GPT_52_MODEL_ID,
     inputModalities: ["text", "image"],
     supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
   },
@@ -90,7 +101,7 @@ export function buildCodexProvider(options: BuildCodexProviderOptions = {}): Pro
       source: "codex-app-server",
       mode: "token",
     }),
-    resolveThinkingProfile: ({ modelId }) => ({
+    resolveThinkingProfile: ({ modelId, reasoning }) => ({
       levels: [
         { id: "off" },
         { id: "minimal" },
@@ -99,6 +110,7 @@ export function buildCodexProvider(options: BuildCodexProviderOptions = {}): Pro
         { id: "high" },
         ...(isKnownXHighCodexModel(modelId) ? [{ id: "xhigh" as const }] : []),
       ],
+      defaultLevel: reasoning || shouldDefaultToReasoningModel(modelId) ? "medium" : "off",
     }),
     resolveSystemPromptContribution: ({ modelId }) =>
       resolveCodexSystemPromptContribution({ modelId }),
@@ -134,21 +146,23 @@ export async function buildCodexProviderCatalog(
   };
 }
 
-function resolveCodexDynamicModel(modelId: string): ProviderRuntimeModel | undefined {
+function resolveCodexDynamicModel(modelId: string) {
   const id = modelId.trim();
   if (!id) {
     return undefined;
   }
+  const definition = buildModelDefinition({
+    id,
+    model: id,
+    inputModalities: ["text", "image"],
+    supportedReasoningEfforts: shouldDefaultToReasoningModel(id) ? ["medium"] : [],
+  });
   return normalizeModelCompat({
-    ...buildModelDefinition({
-      id,
-      model: id,
-      inputModalities: ["text", "image"],
-      supportedReasoningEfforts: shouldDefaultToReasoningModel(id) ? ["medium"] : [],
-    }),
+    ...definition,
+    api: definition.api ?? "openai-codex-responses",
     provider: PROVIDER_ID,
     baseUrl: CODEX_BASE_URL,
-  } as ProviderRuntimeModel);
+  });
 }
 
 function codexModelToDefinition(model: CodexAppServerModel): ModelDefinitionConfig {
@@ -233,5 +247,10 @@ function isKnownXHighCodexModel(modelId: string): boolean {
 
 function isModernCodexModel(modelId: string): boolean {
   const lower = modelId.trim().toLowerCase();
-  return lower === "gpt-5.4" || lower === "gpt-5.4-mini" || lower === "gpt-5.2";
+  return (
+    lower === CODEX_GPT_55_MODEL_ID ||
+    lower === CODEX_GPT_54_MODEL_ID ||
+    lower === CODEX_GPT_54_MINI_MODEL_ID ||
+    lower === CODEX_GPT_52_MODEL_ID
+  );
 }

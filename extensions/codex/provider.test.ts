@@ -16,6 +16,7 @@ function expectStaticFallbackCatalog(
   result: Awaited<ReturnType<typeof buildCodexProviderCatalog>>,
 ) {
   expect(result.provider.models.map((model) => model.id)).toEqual([
+    "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",
     "gpt-5.2",
@@ -184,7 +185,7 @@ describe("codex provider", () => {
     expect(
       provider.resolveSystemPromptContribution?.({
         provider: "codex",
-        modelId: "gpt-5.4",
+        modelId: "gpt-5.5",
       } as never),
     ).toEqual({
       stablePrefix: CODEX_GPT5_BEHAVIOR_CONTRACT,
@@ -194,6 +195,18 @@ describe("codex provider", () => {
         ),
       },
     });
+  });
+
+  it("defaults Codex reasoning-capable models to medium thinking", () => {
+    const provider = buildCodexProvider();
+
+    expect(
+      provider.resolveThinkingProfile?.({
+        provider: "codex",
+        modelId: "gpt-5.5",
+        reasoning: true,
+      } as never)?.defaultLevel,
+    ).toBe("medium");
   });
 
   it("does not add the GPT-5 prompt overlay to non-GPT-5 Codex provider runs", () => {

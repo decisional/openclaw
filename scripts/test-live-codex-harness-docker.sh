@@ -185,7 +185,7 @@ openclaw_live_codex_harness_append_build_extension codex
 "$ROOT_DIR/scripts/test-live-build-docker.sh"
 
 echo "==> Run Codex harness live test in Docker"
-echo "==> Model: ${OPENCLAW_LIVE_CODEX_HARNESS_MODEL:-codex/gpt-5.4}"
+echo "==> Model: ${OPENCLAW_LIVE_CODEX_HARNESS_MODEL:-codex/gpt-5.5}"
 echo "==> Image probe: ${OPENCLAW_LIVE_CODEX_HARNESS_IMAGE_PROBE:-1}"
 echo "==> MCP probe: ${OPENCLAW_LIVE_CODEX_HARNESS_MCP_PROBE:-1}"
 echo "==> Auth mode: $CODEX_HARNESS_AUTH_MODE"
@@ -206,7 +206,7 @@ docker run --rm -t \
   -e OPENCLAW_LIVE_CODEX_HARNESS_DEBUG="${OPENCLAW_LIVE_CODEX_HARNESS_DEBUG:-}" \
   -e OPENCLAW_LIVE_CODEX_HARNESS_IMAGE_PROBE="${OPENCLAW_LIVE_CODEX_HARNESS_IMAGE_PROBE:-1}" \
   -e OPENCLAW_LIVE_CODEX_HARNESS_MCP_PROBE="${OPENCLAW_LIVE_CODEX_HARNESS_MCP_PROBE:-1}" \
-  -e OPENCLAW_LIVE_CODEX_HARNESS_MODEL="${OPENCLAW_LIVE_CODEX_HARNESS_MODEL:-codex/gpt-5.4}" \
+  -e OPENCLAW_LIVE_CODEX_HARNESS_MODEL="${OPENCLAW_LIVE_CODEX_HARNESS_MODEL:-codex/gpt-5.5}" \
   -e OPENCLAW_LIVE_TEST=1 \
   -e OPENCLAW_VITEST_FS_MODULE_CACHE=0 \
   "${DOCKER_AUTH_ENV[@]}" \

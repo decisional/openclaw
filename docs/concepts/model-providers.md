@@ -294,10 +294,11 @@ OpenClaw ships with the pi‑ai catalog. These providers require **no**
 
 ### OpenAI Code (Codex)
 
-- Provider: `openai-codex`
+- Auth provider: `openai-codex`
 - Auth: OAuth (ChatGPT)
-- Example model: `openai-codex/gpt-5.4`
-- CLI: `openclaw onboard --auth-choice openai-codex` or `openclaw models auth login --provider openai-codex`
+- Default model after setup: `codex/gpt-5.5` through the Codex harness
+- Legacy provider model: `openai-codex/gpt-5.4`
+- CLI: `openclaw onboard --auth-choice openai-codex` or `openclaw models auth login --provider openai-codex --set-default`
 - Default transport is `auto` (WebSocket-first, SSE fallback)
 - Override per model via `agents.defaults.models["openai-codex/<model>"].params.transport` (`"sse"`, `"websocket"`, or `"auto"`)
 - `params.serviceTier` is also forwarded on native Codex Responses requests (`chatgpt.com/backend-api`)
@@ -311,7 +312,14 @@ OpenClaw ships with the pi‑ai catalog. These providers require **no**
 
 ```json5
 {
-  agents: { defaults: { model: { primary: "openai-codex/gpt-5.4" } } },
+  plugins: { entries: { codex: { enabled: true } } },
+  agents: {
+    defaults: {
+      model: { primary: "codex/gpt-5.5" },
+      thinkingDefault: "medium",
+      embeddedHarness: { runtime: "codex", fallback: "none" },
+    },
+  },
 }
 ```
 

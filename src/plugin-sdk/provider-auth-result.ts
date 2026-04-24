@@ -16,6 +16,7 @@ export function buildOauthProviderAuthResult(params: {
   profilePrefix?: string;
   credentialExtra?: Record<string, unknown>;
   configPatch?: Partial<OpenClawConfig>;
+  defaultConfigPatch?: Partial<OpenClawConfig>;
   notes?: string[];
 }): ProviderAuthResult {
   const email = params.email ?? undefined;
@@ -51,6 +52,9 @@ export function buildOauthProviderAuthResult(params: {
         },
       } as Partial<OpenClawConfig>),
     defaultModel: params.defaultModel,
+    ...(params.defaultConfigPatch !== undefined
+      ? { defaultConfigPatch: params.defaultConfigPatch }
+      : {}),
     notes: params.notes,
   };
 }

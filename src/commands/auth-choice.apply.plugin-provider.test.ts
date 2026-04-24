@@ -252,6 +252,69 @@ describe("applyAuthChoiceLoadedPluginProvider", () => {
     });
   });
 
+  it("applies selected-model config patches only when the default model is applied", async () => {
+    const baseProvider = buildProvider();
+    const baseMethod = baseProvider.auth[0];
+    const provider: ProviderPlugin = {
+      ...baseProvider,
+      auth: [
+        {
+          ...baseMethod,
+          run: async () => ({
+            profiles: [],
+            defaultModel: LOCAL_DEFAULT_MODEL,
+            defaultConfigPatch: {
+              agents: {
+                defaults: {
+                  thinkingDefault: "medium",
+                  embeddedHarness: {
+                    runtime: "codex",
+                    fallback: "none",
+                  },
+                },
+              },
+            },
+          }),
+        },
+      ],
+    };
+    resolvePluginProviders.mockReturnValue([provider]);
+    resolveProviderPluginChoice.mockReturnValue({
+      provider,
+      method: provider.auth[0],
+    });
+
+    const deferred = await applyAuthChoiceLoadedPluginProvider(
+      buildParams({ setDefaultModel: false }),
+    );
+    expect(deferred?.config.agents?.defaults?.embeddedHarness).toBeUndefined();
+    expect(runProviderModelSelectedHook).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    applyAuthProfileConfig.mockImplementation((config) => config);
+    resolvePluginProviders.mockReturnValue([provider]);
+    resolveProviderPluginChoice.mockReturnValue({
+      provider,
+      method: provider.auth[0],
+    });
+
+    const applied = await applyAuthChoiceLoadedPluginProvider(buildParams());
+    expect(applied?.config.agents?.defaults?.model).toEqual({
+      primary: LOCAL_DEFAULT_MODEL,
+    });
+    expect(applied?.config.agents?.defaults?.thinkingDefault).toBe("medium");
+    expect(applied?.config.agents?.defaults?.embeddedHarness).toEqual({
+      runtime: "codex",
+      fallback: "none",
+    });
+    expect(runProviderModelSelectedHook).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: applied?.config,
+        model: LOCAL_DEFAULT_MODEL,
+      }),
+    );
+  });
+
   it("merges provider config patches and emits provider notes", async () => {
     applyAuthProfileConfig.mockImplementation(((
       config: {

@@ -12,6 +12,7 @@ import {
 import { formatTokenK } from "../commands/models/shared.js";
 import { resolveAgentModelPrimaryValue } from "../config/model-input.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { applyProviderAuthConfigPatch } from "../plugins/provider-auth-choice-helpers.js";
 import { applyPrimaryModel } from "../plugins/provider-model-primary.js";
 import { resolveOwningPluginIdsForProvider } from "../plugins/providers.js";
 import type { ProviderPlugin } from "../plugins/types.js";
@@ -395,14 +396,18 @@ async function maybeHandleProviderPluginSelection(params: {
     workspaceDir: params.workspaceDir,
   });
   if (applied.defaultModel) {
+    const configForSelectedModel = applied.defaultConfigPatch
+      ? applyProviderAuthConfigPatch(applied.config, applied.defaultConfigPatch)
+      : applied.config;
     await runProviderModelSelectedHook({
-      config: applied.config,
+      config: configForSelectedModel,
       model: applied.defaultModel,
       prompter: params.prompter,
       agentDir: params.agentDir,
       workspaceDir: params.workspaceDir,
       env: params.env,
     });
+    return { model: applied.defaultModel, config: configForSelectedModel };
   }
   return { model: applied.defaultModel, config: applied.config };
 }

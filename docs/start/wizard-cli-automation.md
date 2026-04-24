@@ -71,6 +71,23 @@ openclaw onboard --non-interactive \
       --gateway-bind loopback
     ```
   </Accordion>
+  <Accordion title="Codex subscription example">
+    First log in with the Codex CLI so `$CODEX_HOME/auth.json` or
+    `~/.codex/auth.json` exists. Then run:
+
+    ```bash
+    openclaw onboard --non-interactive \
+      --mode local \
+      --auth-choice openai-codex \
+      --accept-risk \
+      --gateway-port 18789 \
+      --gateway-bind loopback
+    ```
+
+    This imports the Codex CLI login into the OpenClaw auth profile store and
+    configures `codex/gpt-5.5` on the native Codex harness.
+
+  </Accordion>
   <Accordion title="Z.AI example">
     ```bash
     openclaw onboard --non-interactive \

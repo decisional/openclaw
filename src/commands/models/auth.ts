@@ -256,6 +256,9 @@ async function persistProviderAuthResult(params: {
       });
     }
     if (params.setDefault && params.result.defaultModel) {
+      if (params.result.defaultConfigPatch) {
+        next = applyProviderAuthConfigPatch(next, params.result.defaultConfigPatch);
+      }
       next = applyDefaultModel(next, params.result.defaultModel);
     }
     return next;

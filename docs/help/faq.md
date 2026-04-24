@@ -654,19 +654,20 @@ for usage/billing and raise limits as needed.
   </Accordion>
 
   <Accordion title="How does Codex auth work?">
-    OpenClaw supports **OpenAI Code (Codex)** via OAuth (ChatGPT sign-in). Onboarding can run the OAuth flow and will set the default model to `openai-codex/gpt-5.4` when appropriate. See [Model providers](/concepts/model-providers) and [Onboarding (CLI)](/start/wizard).
+    OpenClaw supports **OpenAI Code (Codex)** via OAuth (ChatGPT sign-in). Onboarding can run the OAuth flow and now defaults the agent to `codex/gpt-5.5` through the native Codex harness. See [Model providers](/concepts/model-providers) and [Onboarding (CLI)](/start/wizard).
   </Accordion>
 
   <Accordion title="Why does ChatGPT GPT-5.4 not unlock openai/gpt-5.4 in OpenClaw?">
     OpenClaw treats the two routes separately:
 
-    - `openai-codex/gpt-5.4` = ChatGPT/Codex OAuth
+    - `codex/gpt-5.5` = ChatGPT/Codex OAuth through the native Codex harness
+    - `openai-codex/gpt-5.4` = ChatGPT/Codex OAuth through the legacy provider route
     - `openai/gpt-5.4` = direct OpenAI Platform API
 
-    In OpenClaw, ChatGPT/Codex sign-in is wired to the `openai-codex/*` route,
-    not the direct `openai/*` route. If you want the direct API path in
+    In OpenClaw, ChatGPT/Codex sign-in is separate from the direct `openai/*`
+    route. New setup uses `codex/*` by default so the Codex harness owns the
+    embedded turn. If you want the direct API path in
     OpenClaw, set `OPENAI_API_KEY` (or the equivalent OpenAI provider config).
-    If you want ChatGPT/Codex sign-in in OpenClaw, use `openai-codex/*`.
 
   </Accordion>
 
