@@ -42,6 +42,11 @@ Selecting OpenAI Codex auth in onboarding or running
 `codex/gpt-5.5`, medium thinking, and `embeddedHarness.runtime: "codex"` by
 default.
 
+In headless non-interactive onboarding, `--auth-choice openai-codex` imports an
+existing Codex CLI ChatGPT login from `$CODEX_HOME/auth.json` or
+`~/.codex/auth.json`, then applies the same `codex/gpt-5.5` Codex harness
+defaults.
+
 ## Requirements
 
 - OpenClaw with the bundled `codex` plugin available.

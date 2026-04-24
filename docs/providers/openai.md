@@ -86,6 +86,17 @@ Choose your preferred auth method and follow the setup steps.
         ```bash
         openclaw models auth login --provider openai-codex --set-default
         ```
+
+        For headless setup with an existing Codex CLI login, keep the Codex
+        auth file at `$CODEX_HOME/auth.json` or `~/.codex/auth.json`, then run:
+
+        ```bash
+        openclaw onboard --non-interactive --accept-risk --auth-choice openai-codex
+        ```
+
+        OpenClaw imports the Codex CLI login into
+        `~/.openclaw/agents/main/agent/auth-profiles.json` and writes the
+        default model/harness config to `~/.openclaw/openclaw.json`.
       </Step>
       <Step title="Set the default model manually">
         ```bash

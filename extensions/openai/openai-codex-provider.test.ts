@@ -541,6 +541,143 @@ describe("openai codex provider", () => {
     });
   });
 
+  it("imports Codex CLI auth non-interactively and defaults to the Codex harness", async () => {
+    const provider = buildOpenAICodexProviderPlugin();
+    const oauthMethod = provider.auth?.find((method) => method.id === "oauth");
+    const agentDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-openai-codex-provider-"));
+    tempDirs.push(agentDir);
+    const credential = {
+      type: "oauth" as const,
+      provider: "openai-codex",
+      access: "access-token",
+      refresh: "refresh-token",
+      expires: Date.now() + 60_000,
+      email: "codex@example.com",
+      displayName: "Codex User",
+      accountId: "acct-123",
+    };
+    const runtime = {
+      log: vi.fn(),
+      error: vi.fn(),
+      exit: vi.fn(),
+    };
+    readOpenAICodexCliOAuthProfileMock.mockReturnValueOnce({
+      profileId: "openai-codex:default",
+      credential,
+    });
+
+    const config = await oauthMethod?.runNonInteractive?.({
+      authChoice: "openai-codex",
+      config: {
+        plugins: {
+          entries: {
+            codex: {
+              enabled: false,
+              config: { keep: true },
+            },
+          },
+        },
+        agents: {
+          defaults: {
+            model: { primary: "openai-codex/gpt-5.4", fallbacks: ["openai/gpt-5.4"] },
+            thinkingDefault: "high",
+            embeddedHarness: { runtime: "pi", fallback: "pi" },
+          },
+        },
+      },
+      baseConfig: {},
+      opts: {},
+      runtime: runtime as never,
+      agentDir,
+      workspaceDir: "/workspace",
+      resolveApiKey: vi.fn(),
+      toApiKeyCredential: vi.fn(),
+    });
+
+    expect(config).toMatchObject({
+      auth: {
+        profiles: {
+          "openai-codex:default": {
+            provider: "openai-codex",
+            mode: "oauth",
+            email: "codex@example.com",
+            displayName: "Codex User",
+          },
+        },
+      },
+      plugins: {
+        entries: {
+          codex: {
+            enabled: true,
+            config: { keep: true },
+          },
+        },
+      },
+      agents: {
+        defaults: {
+          model: {
+            primary: "codex/gpt-5.5",
+            fallbacks: ["openai/gpt-5.4"],
+          },
+          models: {
+            "codex/gpt-5.5": {},
+          },
+          thinkingDefault: "medium",
+          embeddedHarness: {
+            runtime: "codex",
+            fallback: "none",
+          },
+        },
+      },
+    });
+    await expect(
+      fs.readFile(path.join(agentDir, "auth-profiles.json"), "utf8").then((raw) => JSON.parse(raw)),
+    ).resolves.toMatchObject({
+      profiles: {
+        "openai-codex:default": {
+          provider: "openai-codex",
+          access: "access-token",
+          refresh: "refresh-token",
+        },
+      },
+    });
+    expect(runtime.error).not.toHaveBeenCalled();
+    expect(runtime.exit).not.toHaveBeenCalled();
+    expect(runtime.log).toHaveBeenCalledWith(
+      "Imported existing Codex CLI login into OpenClaw canonical auth.",
+    );
+    expect(runtime.log).toHaveBeenCalledWith("Default model set to codex/gpt-5.5");
+  });
+
+  it("fails non-interactive Codex auth when no Codex CLI login is available", async () => {
+    const provider = buildOpenAICodexProviderPlugin();
+    const importMethod = provider.auth?.find((method) => method.id === "import-codex-cli");
+    const runtime = {
+      log: vi.fn(),
+      error: vi.fn(),
+      exit: vi.fn(),
+    };
+    readOpenAICodexCliOAuthProfileMock.mockReturnValueOnce(null);
+
+    await expect(
+      importMethod?.runNonInteractive?.({
+        authChoice: "openai-codex-import",
+        config: {},
+        baseConfig: {},
+        opts: {},
+        runtime: runtime as never,
+        agentDir: "/tmp/openclaw-agent",
+        workspaceDir: "/workspace",
+        resolveApiKey: vi.fn(),
+        toApiKeyCredential: vi.fn(),
+      }),
+    ).resolves.toBeNull();
+    expect(runtime.error).toHaveBeenCalledWith(
+      "No compatible ~/.codex ChatGPT login found. Run `codex login` first, or use interactive Codex device pairing.",
+    );
+    expect(runtime.exit).toHaveBeenCalledWith(1);
+  });
+
   it("owns native reasoning output mode for Codex responses", () => {
     const provider = buildOpenAICodexProviderPlugin();
 

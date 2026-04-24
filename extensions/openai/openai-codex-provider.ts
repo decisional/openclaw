@@ -2,13 +2,16 @@ import type { Api } from "@mariozechner/pi-ai";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type {
   ProviderAuthContext,
+  ProviderAuthMethodNonInteractiveContext,
   ProviderResolveDynamicModelContext,
 } from "openclaw/plugin-sdk/plugin-entry";
 import {
+  applyAuthProfileConfig,
   ensureAuthProfileStoreForLocalUpdate,
   listProfilesForProvider,
   type OAuthCredential,
   type ProviderAuthResult,
+  upsertAuthProfile,
 } from "openclaw/plugin-sdk/provider-auth";
 import { buildOauthProviderAuthResult } from "openclaw/plugin-sdk/provider-auth";
 import { loginOpenAICodexOAuth } from "openclaw/plugin-sdk/provider-auth-login";
@@ -19,6 +22,11 @@ import {
   type ProviderPlugin,
   type ProviderRuntimeModel,
 } from "openclaw/plugin-sdk/provider-model-shared";
+import {
+  applyAgentDefaultModelPrimary,
+  ensureModelAllowlistEntry,
+  type OpenClawConfig,
+} from "openclaw/plugin-sdk/provider-onboard";
 import { fetchCodexUsage } from "openclaw/plugin-sdk/provider-usage";
 import { normalizeLowercaseStringOrEmpty, readStringValue } from "openclaw/plugin-sdk/text-runtime";
 import { isOpenAIApiBaseUrl, isOpenAICodexBaseUrl } from "./base-url.js";
@@ -403,17 +411,13 @@ async function runOpenAICodexDeviceCode(ctx: ProviderAuthContext) {
   }
 }
 
-async function runImportOpenAICodexCliAuth(ctx: ProviderAuthContext) {
+function buildOpenAICodexCliImportResult(params: { env?: NodeJS.ProcessEnv; agentDir?: string }) {
   const profile = readOpenAICodexCliOAuthProfile({
-    env: ctx.env ?? process.env,
-    store: ensureAuthProfileStoreForLocalUpdate(ctx.agentDir),
+    env: params.env ?? process.env,
+    store: ensureAuthProfileStoreForLocalUpdate(params.agentDir),
   });
   if (!profile) {
-    const message =
-      "No compatible ~/.codex ChatGPT login found. Use Browser Login or Device Pairing instead.";
-    ctx.runtime.error(message);
-    await ctx.prompter.note(message, OPENAI_CODEX_IMPORT_LABEL);
-    return { profiles: [] };
+    return null;
   }
 
   return {
@@ -422,7 +426,94 @@ async function runImportOpenAICodexCliAuth(ctx: ProviderAuthContext) {
     defaultConfigPatch: OPENAI_CODEX_HARNESS_DEFAULT_CONFIG_PATCH,
     defaultModel: OPENAI_CODEX_HARNESS_DEFAULT_MODEL,
     notes: ["Imported existing Codex CLI login into OpenClaw canonical auth."],
-  } satisfies ProviderAuthResult;
+  };
+}
+
+async function runImportOpenAICodexCliAuth(ctx: ProviderAuthContext) {
+  const result = buildOpenAICodexCliImportResult({
+    env: ctx.env,
+    agentDir: ctx.agentDir,
+  });
+  if (!result) {
+    const message =
+      "No compatible ~/.codex ChatGPT login found. Use Browser Login or Device Pairing instead.";
+    ctx.runtime.error(message);
+    await ctx.prompter.note(message, OPENAI_CODEX_IMPORT_LABEL);
+    return { profiles: [] };
+  }
+
+  return result;
+}
+
+function applyOpenAICodexHarnessDefaultConfig(cfg: OpenClawConfig): OpenClawConfig {
+  const withModel = ensureModelAllowlistEntry({
+    cfg,
+    modelRef: OPENAI_CODEX_HARNESS_DEFAULT_MODEL,
+  });
+  const withHarnessDefaults = {
+    ...withModel,
+    plugins: {
+      ...withModel.plugins,
+      entries: {
+        ...withModel.plugins?.entries,
+        codex: {
+          ...withModel.plugins?.entries?.codex,
+          enabled: true,
+        },
+      },
+    },
+    agents: {
+      ...withModel.agents,
+      defaults: {
+        ...withModel.agents?.defaults,
+        thinkingDefault: OPENAI_CODEX_HARNESS_DEFAULT_THINKING,
+        embeddedHarness: {
+          ...withModel.agents?.defaults?.embeddedHarness,
+          runtime: "codex",
+          fallback: "none",
+        },
+      },
+    },
+  } satisfies OpenClawConfig;
+  return applyAgentDefaultModelPrimary(withHarnessDefaults, OPENAI_CODEX_HARNESS_DEFAULT_MODEL);
+}
+
+async function runImportOpenAICodexCliAuthNonInteractive(
+  ctx: ProviderAuthMethodNonInteractiveContext,
+) {
+  const result = buildOpenAICodexCliImportResult({
+    env: process.env,
+    agentDir: ctx.agentDir,
+  });
+  const profile = result?.profiles[0];
+  if (!profile) {
+    ctx.runtime.error(
+      "No compatible ~/.codex ChatGPT login found. Run `codex login` first, or use interactive Codex device pairing.",
+    );
+    ctx.runtime.exit(1);
+    return null;
+  }
+
+  upsertAuthProfile({
+    profileId: profile.profileId,
+    credential: profile.credential,
+    agentDir: ctx.agentDir,
+  });
+
+  const credential = profile.credential;
+  const withProfile = applyAuthProfileConfig(ctx.config, {
+    profileId: profile.profileId,
+    provider: PROVIDER_ID,
+    mode: "oauth",
+    ...("email" in credential && credential.email ? { email: credential.email } : {}),
+    ...("displayName" in credential && credential.displayName
+      ? { displayName: credential.displayName }
+      : {}),
+  });
+  const nextConfig = applyOpenAICodexHarnessDefaultConfig(withProfile);
+  ctx.runtime.log("Imported existing Codex CLI login into OpenClaw canonical auth.");
+  ctx.runtime.log(`Default model set to ${OPENAI_CODEX_HARNESS_DEFAULT_MODEL}`);
+  return nextConfig;
 }
 
 function ensureOpenAICodexCatalogAuthStore(ctx: { agentDir?: string; env?: NodeJS.ProcessEnv }) {
@@ -478,6 +569,7 @@ export function buildOpenAICodexProviderPlugin(): ProviderPlugin {
           ...OPENAI_WIZARD_GROUP,
         },
         run: async (ctx) => await runOpenAICodexOAuth(ctx),
+        runNonInteractive: async (ctx) => await runImportOpenAICodexCliAuthNonInteractive(ctx),
       },
       {
         id: "device-code",
@@ -498,6 +590,7 @@ export function buildOpenAICodexProviderPlugin(): ProviderPlugin {
             return { profiles: [] };
           }
         },
+        runNonInteractive: async (ctx) => await runImportOpenAICodexCliAuthNonInteractive(ctx),
       },
       {
         id: "import-codex-cli",
@@ -513,6 +606,7 @@ export function buildOpenAICodexProviderPlugin(): ProviderPlugin {
           ...OPENAI_WIZARD_GROUP,
         },
         run: async (ctx) => await runImportOpenAICodexCliAuth(ctx),
+        runNonInteractive: async (ctx) => await runImportOpenAICodexCliAuthNonInteractive(ctx),
       },
     ],
     catalog: {
