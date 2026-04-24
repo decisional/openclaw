@@ -236,6 +236,14 @@ export type ProviderAuthResult = {
    * The caller still persists auth-profile bindings separately.
    */
   configPatch?: Partial<OpenClawConfig>;
+  /**
+   * Optional config patch to merge only when `defaultModel` is selected as the
+   * active/default model by the caller.
+   *
+   * Use this for model-selection policy that should not affect users who only
+   * add credentials, such as a provider-owned harness/runtime default.
+   */
+  defaultConfigPatch?: Partial<OpenClawConfig>;
   defaultModel?: string;
   notes?: string[];
 };

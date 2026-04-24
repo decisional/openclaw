@@ -141,10 +141,14 @@ agent turns. Enable the bundled `codex` plugin first, and include `codex` in
 `plugins.allow` if your config uses a restrictive allowlist. It is different
 from `openai-codex/*`:
 
-- `openai-codex/*` uses ChatGPT/Codex OAuth through the normal OpenClaw provider
+- `openai-codex/*` uses ChatGPT/Codex OAuth through the legacy OpenClaw provider
   path.
 - `codex/*` uses the bundled Codex provider and routes the turn through Codex
   app-server.
+
+Selecting OpenAI Codex auth in onboarding defaults users onto `codex/*`; the
+`openai-codex/*` prefix remains available when they explicitly choose that
+provider route.
 
 When this mode runs, Codex owns the native thread id, resume behavior,
 compaction, and app-server execution. OpenClaw still owns the chat channel,

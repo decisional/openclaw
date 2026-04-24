@@ -293,7 +293,32 @@ describe("modelsAuthLoginCommand", () => {
           },
         },
       ],
-      defaultModel: "openai-codex/gpt-5.4",
+      defaultModel: "codex/gpt-5.5",
+      configPatch: {
+        agents: {
+          defaults: {
+            models: {
+              "codex/gpt-5.5": {},
+            },
+          },
+        },
+      },
+      defaultConfigPatch: {
+        plugins: {
+          entries: {
+            codex: { enabled: true },
+          },
+        },
+        agents: {
+          defaults: {
+            thinkingDefault: "medium",
+            embeddedHarness: {
+              runtime: "codex",
+              fallback: "none",
+            },
+          },
+        },
+      },
     });
     mocks.resolvePluginProviders.mockReturnValue([
       createProvider({
@@ -360,11 +385,28 @@ describe("modelsAuthLoginCommand", () => {
       "Auth profile: openai-codex:user@example.com (openai-codex/oauth)",
     );
     expect(runtime.log).toHaveBeenCalledWith(
-      "Default model available: openai-codex/gpt-5.4 (use --set-default to apply)",
+      "Default model available: codex/gpt-5.5 (use --set-default to apply)",
     );
     expect(runtime.log).toHaveBeenCalledWith(
       "Tip: Codex-capable models can use native Codex web search. Enable it with openclaw configure --section web (recommended mode: cached). Docs: https://docs.openclaw.ai/tools/web",
     );
+  });
+
+  it("applies selected-model config when openai-codex login sets the default", async () => {
+    const runtime = createRuntime();
+
+    await modelsAuthLoginCommand({ provider: "openai-codex", setDefault: true }, runtime);
+
+    expect(lastUpdatedConfig?.agents?.defaults?.model).toEqual({
+      primary: "codex/gpt-5.5",
+    });
+    expect(lastUpdatedConfig?.agents?.defaults?.thinkingDefault).toBe("medium");
+    expect(lastUpdatedConfig?.agents?.defaults?.embeddedHarness).toEqual({
+      runtime: "codex",
+      fallback: "none",
+    });
+    expect(lastUpdatedConfig?.plugins?.entries?.codex?.enabled).toBe(true);
+    expect(runtime.log).toHaveBeenCalledWith("Default model set to codex/gpt-5.5");
   });
 
   it("loads the owning plugin for an explicit provider even in a clean config", async () => {

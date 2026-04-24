@@ -27,15 +27,20 @@ and custom-provider runs keep their current behavior.
 
 OpenClaw has separate routes for OpenAI and Codex-shaped access:
 
-| Model ref              | Runtime path                                 | Use when                                                                |
-| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------- |
-| `openai/gpt-5.4`       | OpenAI provider through OpenClaw/PI plumbing | You want direct OpenAI Platform API access with `OPENAI_API_KEY`.       |
-| `openai-codex/gpt-5.4` | OpenAI Codex OAuth provider through PI       | You want ChatGPT/Codex OAuth without the Codex app-server harness.      |
-| `codex/gpt-5.5`        | Bundled Codex provider plus Codex harness    | You want native Codex app-server execution for the embedded agent turn. |
+| Model ref              | Runtime path                                 | Use when                                                                      |
+| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------- |
+| `openai/gpt-5.4`       | OpenAI provider through OpenClaw/PI plumbing | You want direct OpenAI Platform API access with `OPENAI_API_KEY`.             |
+| `codex/gpt-5.5`        | Bundled Codex provider plus Codex harness    | You want native Codex app-server execution for the embedded agent turn.       |
+| `openai-codex/gpt-5.4` | OpenAI Codex OAuth provider through PI       | You explicitly want ChatGPT/Codex OAuth without the Codex app-server harness. |
 
 The Codex harness only claims `codex/*` model refs. Existing `openai/*`,
 `openai-codex/*`, Anthropic, Gemini, xAI, local, and custom provider refs keep
 their normal paths.
+
+Selecting OpenAI Codex auth in onboarding or running
+`openclaw models auth login --provider openai-codex --set-default` configures
+`codex/gpt-5.5`, medium thinking, and `embeddedHarness.runtime: "codex"` by
+default.
 
 ## Requirements
 

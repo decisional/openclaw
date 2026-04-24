@@ -116,7 +116,11 @@ export async function runProviderPluginAuthMethod(params: {
   secretInputMode?: ProviderAuthOptionBag["secretInputMode"];
   allowSecretRefPrompt?: boolean;
   opts?: Partial<ProviderAuthOptionBag>;
-}): Promise<{ config: OpenClawConfig; defaultModel?: string }> {
+}): Promise<{
+  config: OpenClawConfig;
+  defaultModel?: string;
+  defaultConfigPatch?: Partial<OpenClawConfig>;
+}> {
   const agentId = params.agentId ?? resolveDefaultAgentId(params.config);
   const defaultAgentId = resolveDefaultAgentId(params.config);
   const agentDir =
@@ -180,6 +184,9 @@ export async function runProviderPluginAuthMethod(params: {
   return {
     config: nextConfig,
     defaultModel: result.defaultModel,
+    ...(result.defaultConfigPatch !== undefined
+      ? { defaultConfigPatch: result.defaultConfigPatch }
+      : {}),
   };
 }
 
@@ -223,6 +230,9 @@ export async function applyAuthChoiceLoadedPluginProvider(
   let agentModelOverride: string | undefined;
   if (applied.defaultModel) {
     if (params.setDefaultModel) {
+      if (applied.defaultConfigPatch) {
+        nextConfig = applyProviderAuthConfigPatch(nextConfig, applied.defaultConfigPatch);
+      }
       nextConfig = applyDefaultModel(nextConfig, applied.defaultModel);
       await runProviderModelSelectedHook({
         config: nextConfig,
@@ -310,6 +320,9 @@ export async function applyAuthChoicePluginProvider(
   nextConfig = applied.config;
   if (applied.defaultModel) {
     if (params.setDefaultModel) {
+      if (applied.defaultConfigPatch) {
+        nextConfig = applyProviderAuthConfigPatch(nextConfig, applied.defaultConfigPatch);
+      }
       nextConfig = applyDefaultModel(nextConfig, applied.defaultModel);
       await runProviderModelSelectedHook({
         config: nextConfig,

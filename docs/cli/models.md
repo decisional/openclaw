@@ -120,6 +120,10 @@ Examples:
 openclaw models auth login --provider openai-codex --set-default
 ```
 
+With `--set-default`, Codex auth selects `codex/gpt-5.5` and the native Codex
+harness by default. Without `--set-default`, the command only stores the auth
+profile and reports the suggested default.
+
 Notes:
 
 - `setup-token` and `paste-token` remain generic token commands for providers

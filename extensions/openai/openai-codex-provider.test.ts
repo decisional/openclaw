@@ -7,6 +7,7 @@ const refreshOpenAICodexTokenMock = vi.hoisted(() => vi.fn());
 const readOpenAICodexCliOAuthProfileMock = vi.hoisted(() => vi.fn());
 const hasOpenAICodexCliOAuthCredentialMock = vi.hoisted(() => vi.fn());
 const loginOpenAICodexDeviceCodeMock = vi.hoisted(() => vi.fn());
+const loginOpenAICodexOAuthMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./openai-codex-provider.runtime.js", () => ({
   refreshOpenAICodexToken: refreshOpenAICodexTokenMock,
@@ -23,6 +24,10 @@ vi.mock("./openai-codex-cli-auth.js", async (importOriginal) => {
 
 vi.mock("./openai-codex-device-code.js", () => ({
   loginOpenAICodexDeviceCode: loginOpenAICodexDeviceCodeMock,
+}));
+
+vi.mock("openclaw/plugin-sdk/provider-auth-login", () => ({
+  loginOpenAICodexOAuth: loginOpenAICodexOAuthMock,
 }));
 
 let buildOpenAICodexProviderPlugin: typeof import("./openai-codex-provider.js").buildOpenAICodexProviderPlugin;
@@ -71,6 +76,7 @@ describe("openai codex provider", () => {
     hasOpenAICodexCliOAuthCredentialMock.mockReset();
     hasOpenAICodexCliOAuthCredentialMock.mockReturnValue(false);
     loginOpenAICodexDeviceCodeMock.mockReset();
+    loginOpenAICodexOAuthMock.mockReset();
   });
 
   afterEach(async () => {
@@ -203,6 +209,76 @@ describe("openai codex provider", () => {
     });
   });
 
+  it("defaults browser Codex auth to the native Codex harness", async () => {
+    const provider = buildOpenAICodexProviderPlugin();
+    const oauthMethod = provider.auth?.find((method) => method.id === "oauth");
+    loginOpenAICodexOAuthMock.mockResolvedValueOnce({
+      access: "browser-access-token",
+      refresh: "browser-refresh-token",
+      expires: Date.now() + 60_000,
+      email: "codex@example.com",
+    });
+
+    const result = await oauthMethod?.run({
+      config: {},
+      env: process.env,
+      prompter: {
+        note: vi.fn(),
+        progress: vi.fn(),
+      } as never,
+      runtime: {
+        log: vi.fn(),
+        error: vi.fn(),
+        exit: vi.fn(),
+      } as never,
+      isRemote: false,
+      openUrl: async () => {},
+      oauth: { createVpsAwareHandlers: (() => ({})) as never },
+    });
+
+    expect(result).toMatchObject({
+      profiles: [
+        {
+          credential: {
+            type: "oauth",
+            provider: "openai-codex",
+            access: "browser-access-token",
+            refresh: "browser-refresh-token",
+            email: "codex@example.com",
+          },
+        },
+      ],
+      defaultModel: "codex/gpt-5.5",
+      configPatch: {
+        agents: {
+          defaults: {
+            models: {
+              "codex/gpt-5.5": {},
+            },
+          },
+        },
+      },
+      defaultConfigPatch: {
+        plugins: {
+          entries: {
+            codex: {
+              enabled: true,
+            },
+          },
+        },
+        agents: {
+          defaults: {
+            thinkingDefault: "medium",
+            embeddedHarness: {
+              runtime: "codex",
+              fallback: "none",
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("soft-fails import when no compatible ~/.codex login exists", async () => {
     const provider = buildOpenAICodexProviderPlugin();
     const importMethod = provider.auth?.find((method) => method.id === "import-codex-cli");
@@ -285,7 +361,25 @@ describe("openai codex provider", () => {
           },
         },
       ],
-      defaultModel: "openai-codex/gpt-5.4",
+      defaultModel: "codex/gpt-5.5",
+      defaultConfigPatch: {
+        plugins: {
+          entries: {
+            codex: {
+              enabled: true,
+            },
+          },
+        },
+        agents: {
+          defaults: {
+            thinkingDefault: "medium",
+            embeddedHarness: {
+              runtime: "codex",
+              fallback: "none",
+            },
+          },
+        },
+      },
     });
     expect(result?.profiles[0]?.credential).not.toHaveProperty("idToken");
     expect(result?.profiles[0]?.credential).not.toHaveProperty("accountId");
@@ -423,6 +517,27 @@ describe("openai codex provider", () => {
           }),
         },
       ],
+      defaultModel: "codex/gpt-5.5",
+      configPatch: {
+        agents: {
+          defaults: {
+            models: {
+              "codex/gpt-5.5": {},
+            },
+          },
+        },
+      },
+      defaultConfigPatch: {
+        agents: {
+          defaults: {
+            thinkingDefault: "medium",
+            embeddedHarness: {
+              runtime: "codex",
+              fallback: "none",
+            },
+          },
+        },
+      },
     });
   });
 

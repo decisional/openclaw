@@ -254,6 +254,12 @@ API key auth, and dynamic model resolution.
     `createDefaultModelsPresetAppliers(...)`, and
     `createModelCatalogPresetAppliers(...)`.
 
+    Provider auth results can also return `defaultConfigPatch` when a patch
+    should apply only if the caller actually selects the returned
+    `defaultModel`. Use `configPatch` for credential-owned provider setup that
+    should always persist, and `defaultConfigPatch` for selected-model policy
+    such as harness/runtime defaults.
+
     When a provider's native endpoint supports streamed usage blocks on the
     normal `openai-completions` transport, prefer the shared catalog helpers in
     `openclaw/plugin-sdk/provider-catalog-shared` instead of hardcoding

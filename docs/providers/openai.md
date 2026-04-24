@@ -12,7 +12,7 @@ title: "OpenAI"
 OpenAI provides developer APIs for GPT models. OpenClaw supports two auth routes:
 
 - **API key** — direct OpenAI Platform access with usage-based billing (`openai/*` models)
-- **Codex subscription** — ChatGPT/Codex sign-in with subscription access (`openai-codex/*` models)
+- **Codex subscription** — ChatGPT/Codex sign-in with subscription access. New setup defaults to `codex/gpt-5.5` through the native Codex harness; `openai-codex/*` remains available as the legacy OAuth provider route.
 
 OpenAI explicitly supports subscription OAuth usage in external tools and workflows like OpenClaw.
 
@@ -54,7 +54,7 @@ Choose your preferred auth method and follow the setup steps.
     | `openai/gpt-5.4-pro` | Direct OpenAI Platform API | `OPENAI_API_KEY` |
 
     <Note>
-    ChatGPT/Codex sign-in is routed through `openai-codex/*`, not `openai/*`.
+    ChatGPT/Codex sign-in is separate from `openai/*`. New setup defaults to `codex/gpt-5.5` through the native Codex harness.
     </Note>
 
     ### Config example
@@ -84,17 +84,20 @@ Choose your preferred auth method and follow the setup steps.
         Or run OAuth directly:
 
         ```bash
-        openclaw models auth login --provider openai-codex
+        openclaw models auth login --provider openai-codex --set-default
         ```
       </Step>
-      <Step title="Set the default model">
+      <Step title="Set the default model manually">
         ```bash
-        openclaw config set agents.defaults.model.primary openai-codex/gpt-5.4
+        openclaw config set agents.defaults.model.primary codex/gpt-5.5
+        openclaw config set agents.defaults.thinkingDefault medium
+        openclaw config set agents.defaults.embeddedHarness.runtime codex
+        openclaw config set agents.defaults.embeddedHarness.fallback none
         ```
       </Step>
       <Step title="Verify the model is available">
         ```bash
-        openclaw models list --provider openai-codex
+        openclaw models list --provider codex
         ```
       </Step>
     </Steps>
@@ -103,18 +106,26 @@ Choose your preferred auth method and follow the setup steps.
 
     | Model ref | Route | Auth |
     |-----------|-------|------|
-    | `openai-codex/gpt-5.4` | ChatGPT/Codex OAuth | Codex sign-in |
+    | `codex/gpt-5.5` | Codex app-server harness | Codex sign-in |
+    | `openai-codex/gpt-5.4` | ChatGPT/Codex OAuth through OpenClaw/PI | Codex sign-in |
     | `openai-codex/gpt-5.3-codex-spark` | ChatGPT/Codex OAuth | Codex sign-in (entitlement-dependent) |
 
     <Note>
-    This route is intentionally separate from `openai/gpt-5.4`. Use `openai/*` with an API key for direct Platform access, and `openai-codex/*` for Codex subscription access.
+    This route is intentionally separate from `openai/gpt-5.4`. Use `openai/*` with an API key for direct Platform access. Use `codex/*` for the native Codex harness. Use `openai-codex/*` only when you explicitly want the legacy OAuth provider route.
     </Note>
 
     ### Config example
 
     ```json5
     {
-      agents: { defaults: { model: { primary: "openai-codex/gpt-5.4" } } },
+      plugins: { entries: { codex: { enabled: true } } },
+      agents: {
+        defaults: {
+          model: { primary: "codex/gpt-5.5" },
+          thinkingDefault: "medium",
+          embeddedHarness: { runtime: "codex", fallback: "none" },
+        },
+      },
     }
     ```
 

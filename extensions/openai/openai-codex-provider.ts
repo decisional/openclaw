@@ -1,8 +1,8 @@
+import type { Api } from "@mariozechner/pi-ai";
 import { formatErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import type {
   ProviderAuthContext,
   ProviderResolveDynamicModelContext,
-  ProviderRuntimeModel,
 } from "openclaw/plugin-sdk/plugin-entry";
 import {
   ensureAuthProfileStoreForLocalUpdate,
@@ -17,11 +17,15 @@ import {
   normalizeModelCompat,
   normalizeProviderId,
   type ProviderPlugin,
+  type ProviderRuntimeModel,
 } from "openclaw/plugin-sdk/provider-model-shared";
 import { fetchCodexUsage } from "openclaw/plugin-sdk/provider-usage";
 import { normalizeLowercaseStringOrEmpty, readStringValue } from "openclaw/plugin-sdk/text-runtime";
 import { isOpenAIApiBaseUrl, isOpenAICodexBaseUrl } from "./base-url.js";
-import { OPENAI_CODEX_DEFAULT_MODEL } from "./default-models.js";
+import {
+  OPENAI_CODEX_HARNESS_DEFAULT_MODEL,
+  OPENAI_CODEX_HARNESS_DEFAULT_THINKING,
+} from "./default-models.js";
 import { resolveCodexAuthIdentity } from "./openai-codex-auth-identity.js";
 import { buildOpenAICodexProvider } from "./openai-codex-catalog.js";
 import {
@@ -115,17 +119,41 @@ const OPENAI_CODEX_MODERN_MODEL_IDS = [
   OPENAI_CODEX_GPT_53_MODEL_ID,
   OPENAI_CODEX_GPT_53_SPARK_MODEL_ID,
 ] as const;
+const OPENAI_CODEX_AUTH_CONFIG_PATCH = {
+  agents: {
+    defaults: {
+      models: {
+        [OPENAI_CODEX_HARNESS_DEFAULT_MODEL]: {},
+      },
+    },
+  },
+} satisfies NonNullable<ProviderAuthResult["configPatch"]>;
+const OPENAI_CODEX_HARNESS_DEFAULT_CONFIG_PATCH = {
+  plugins: {
+    entries: {
+      codex: {
+        enabled: true,
+      },
+    },
+  },
+  agents: {
+    defaults: {
+      thinkingDefault: OPENAI_CODEX_HARNESS_DEFAULT_THINKING,
+      embeddedHarness: {
+        runtime: "codex",
+        fallback: "none",
+      },
+    },
+  },
+} satisfies NonNullable<ProviderAuthResult["defaultConfigPatch"]>;
 
 function isLegacyCodexCompatBaseUrl(baseUrl?: string): boolean {
   const trimmed = baseUrl?.trim();
   return !!trimmed && /^https?:\/\/api\.githubcopilot\.com(?:\/v1)?\/?$/iu.test(trimmed);
 }
 
-function normalizeCodexTransportFields(params: {
-  api?: ProviderRuntimeModel["api"] | null;
-  baseUrl?: string;
-}): {
-  api?: ProviderRuntimeModel["api"];
+function normalizeCodexTransportFields(params: { api?: Api; baseUrl?: string }): {
+  api?: Api;
   baseUrl?: string;
 } {
   const useCodexTransport =
@@ -303,7 +331,9 @@ async function runOpenAICodexOAuth(ctx: ProviderAuthContext) {
 
   return buildOauthProviderAuthResult({
     providerId: PROVIDER_ID,
-    defaultModel: OPENAI_CODEX_DEFAULT_MODEL,
+    defaultModel: OPENAI_CODEX_HARNESS_DEFAULT_MODEL,
+    configPatch: OPENAI_CODEX_AUTH_CONFIG_PATCH,
+    defaultConfigPatch: OPENAI_CODEX_HARNESS_DEFAULT_CONFIG_PATCH,
     access: creds.access,
     refresh: creds.refresh,
     expires: creds.expires,
@@ -353,7 +383,9 @@ async function runOpenAICodexDeviceCode(ctx: ProviderAuthContext) {
 
     return buildOauthProviderAuthResult({
       providerId: PROVIDER_ID,
-      defaultModel: OPENAI_CODEX_DEFAULT_MODEL,
+      defaultModel: OPENAI_CODEX_HARNESS_DEFAULT_MODEL,
+      configPatch: OPENAI_CODEX_AUTH_CONFIG_PATCH,
+      defaultConfigPatch: OPENAI_CODEX_HARNESS_DEFAULT_CONFIG_PATCH,
       access: creds.access,
       refresh: creds.refresh,
       expires: creds.expires,
@@ -386,16 +418,9 @@ async function runImportOpenAICodexCliAuth(ctx: ProviderAuthContext) {
 
   return {
     profiles: [{ profileId: profile.profileId, credential: profile.credential }],
-    configPatch: {
-      agents: {
-        defaults: {
-          models: {
-            [OPENAI_CODEX_DEFAULT_MODEL]: {},
-          },
-        },
-      },
-    },
-    defaultModel: OPENAI_CODEX_DEFAULT_MODEL,
+    configPatch: OPENAI_CODEX_AUTH_CONFIG_PATCH,
+    defaultConfigPatch: OPENAI_CODEX_HARNESS_DEFAULT_CONFIG_PATCH,
+    defaultModel: OPENAI_CODEX_HARNESS_DEFAULT_MODEL,
     notes: ["Imported existing Codex CLI login into OpenClaw canonical auth."],
   } satisfies ProviderAuthResult;
 }
@@ -536,7 +561,10 @@ export function buildOpenAICodexProviderPlugin(): ProviderPlugin {
       if (normalizeProviderId(provider) !== PROVIDER_ID) {
         return undefined;
       }
-      const normalized = normalizeCodexTransportFields({ api, baseUrl });
+      const normalized = normalizeCodexTransportFields({
+        api: typeof api === "string" ? (api as Api) : undefined,
+        baseUrl,
+      });
       if (normalized.api === api && normalized.baseUrl === baseUrl) {
         return undefined;
       }

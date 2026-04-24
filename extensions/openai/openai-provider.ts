@@ -1,17 +1,19 @@
-import {
-  type ProviderResolveDynamicModelContext,
-  type ProviderRuntimeModel,
-} from "openclaw/plugin-sdk/plugin-entry";
+import type { ProviderResolveDynamicModelContext } from "openclaw/plugin-sdk/plugin-entry";
 import { createProviderApiKeyAuthMethod } from "openclaw/plugin-sdk/provider-auth-api-key";
 import {
   DEFAULT_CONTEXT_TOKENS,
   normalizeModelCompat,
   normalizeProviderId,
   type ProviderPlugin,
+  type ProviderRuntimeModel,
 } from "openclaw/plugin-sdk/provider-model-shared";
 import { normalizeLowercaseStringOrEmpty } from "openclaw/plugin-sdk/text-runtime";
 import { isOpenAIApiBaseUrl } from "./base-url.js";
-import { applyOpenAIConfig, OPENAI_DEFAULT_MODEL } from "./default-models.js";
+import {
+  applyOpenAIConfig,
+  OPENAI_CODEX_HARNESS_DEFAULT_MODEL,
+  OPENAI_DEFAULT_MODEL,
+} from "./default-models.js";
 import {
   buildOpenAIResponsesProviderHooks,
   buildOpenAISyntheticCatalogEntry,
@@ -96,9 +98,7 @@ function normalizeOpenAITransport(model: ProviderRuntimeModel): ProviderRuntimeM
   };
 }
 
-function resolveOpenAIGpt54ForwardCompatModel(
-  ctx: ProviderResolveDynamicModelContext,
-): ProviderRuntimeModel | undefined {
+function resolveOpenAIGpt54ForwardCompatModel(ctx: ProviderResolveDynamicModelContext) {
   const trimmedModelId = ctx.modelId.trim();
   const lower = normalizeLowercaseStringOrEmpty(trimmedModelId);
   let templateIds: readonly string[];
@@ -235,7 +235,7 @@ export function buildOpenAIProvider(): ProviderPlugin {
       if (ctx.provider !== PROVIDER_ID || ctx.listProfileIds("openai-codex").length === 0) {
         return undefined;
       }
-      return 'No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use openai-codex/gpt-5.4 (OAuth) or set OPENAI_API_KEY to use openai/gpt-5.4.';
+      return `No API key found for provider "openai". You are authenticated with OpenAI Codex OAuth. Use ${OPENAI_CODEX_HARNESS_DEFAULT_MODEL} (Codex harness) or set OPENAI_API_KEY to use openai/gpt-5.4.`;
     },
     suppressBuiltInModel: (ctx) => {
       if (
