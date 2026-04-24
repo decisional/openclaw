@@ -34,6 +34,7 @@ OpenClaw has three layers that work together:
     or ship inside plugins.
 
     [Skills reference](/tools/skills) | [Creating skills](/tools/creating-skills)
+    | [Decisional integrations](/tools/decisional-integrations)
 
   </Step>
 
@@ -99,6 +100,11 @@ For partial changes, prefer `config.schema.lookup` then `config.patch`. Use
 `config.apply` only when you intentionally replace the entire config.
 The tool also refuses to change `tools.exec.ask` or `tools.exec.security`;
 legacy `tools.bash.*` aliases normalize to the same protected exec paths.
+
+Bundled skills can also teach agents how to use external CLIs and integration
+catalogs. [Decisional Integrations](/tools/decisional-integrations) covers
+Decisional toolkit discovery, connected-credential checks, and connect URLs for
+missing credentials.
 
 ### Plugin-provided tools
 
