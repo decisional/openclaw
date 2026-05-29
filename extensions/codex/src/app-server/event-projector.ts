@@ -60,6 +60,7 @@ export class CodexAppServerEventProjector {
   private readonly completedItemIds = new Set<string>();
   private readonly activeCompactionItemIds = new Set<string>();
   private readonly toolMetas = new Map<string, { toolName: string; meta?: string }>();
+  private readonly toolCallActionsById = new Map<string, string>();
   private assistantStarted = false;
   private reasoningStarted = false;
   private reasoningEnded = false;
@@ -123,6 +124,26 @@ export class CodexAppServerEventProjector {
         break;
       default:
         break;
+    }
+  }
+
+  /**
+   * Records the `action` argument of a dynamic tool call so it can be attached
+   * to the projected `item` tool event. Codex delivers tool arguments on the
+   * separate `item/tool/call` request (keyed by callId, which equals the thread
+   * item id), not on the item lifecycle notifications, so a consumer of the
+   * normalized stream would otherwise never see the action. The AgentMail
+   * `message` tool relies on this to distinguish action=send from
+   * action=no_reply; without it an explicit no-reply is misread as a failed
+   * send and the inbound event is retried until it alerts.
+   */
+  recordToolCallAction(callId: string | undefined, args: JsonValue | undefined): void {
+    if (!callId) {
+      return;
+    }
+    const action = readToolCallAction(args);
+    if (action) {
+      this.toolCallActionsById.set(callId, action);
     }
   }
 
@@ -412,6 +433,7 @@ export class CodexAppServerEventProjector {
     if (!kind) {
       return;
     }
+    const action = kind === "tool" ? this.toolCallActionsById.get(item.id) : undefined;
     this.emitAgentEvent({
       stream: "item",
       data: {
@@ -421,6 +443,7 @@ export class CodexAppServerEventProjector {
         title: itemTitle(item),
         status: params.phase === "start" ? "running" : itemStatus(item),
         ...(itemName(item) ? { name: itemName(item) } : {}),
+        ...(action ? { action } : {}),
         ...(itemMeta(item) ? { meta: itemMeta(item) } : {}),
       },
     });
@@ -682,6 +705,22 @@ function itemMeta(item: CodexThreadItem): string | undefined {
 function readItemString(item: CodexThreadItem, key: string): string | undefined {
   const value = (item as Record<string, unknown>)[key];
   return typeof value === "string" ? value : undefined;
+}
+
+function readToolCallAction(args: JsonValue | undefined): string | undefined {
+  let parsed: JsonValue | undefined = args;
+  if (typeof args === "string") {
+    try {
+      parsed = JSON.parse(args) as JsonValue;
+    } catch {
+      return undefined;
+    }
+  }
+  if (!isJsonObject(parsed)) {
+    return undefined;
+  }
+  const action = parsed.action;
+  return typeof action === "string" && action.trim().length > 0 ? action.trim() : undefined;
 }
 
 function readItem(value: JsonValue | undefined): CodexThreadItem | undefined {

@@ -344,4 +344,58 @@ describe("CodexAppServerEventProjector", () => {
     expect(result.assistantTexts).toEqual(["final answer"]);
     expect(JSON.stringify(result.messagesSnapshot)).toContain("Codex plan");
   });
+
+  it("attaches a recorded tool-call action to the projected item event", async () => {
+    const onAgentEvent = vi.fn();
+    const projector = createProjector({ ...createParams(), onAgentEvent });
+
+    // run-attempt forwards the item/tool/call arguments via recordToolCallAction
+    // before the matching item/completed; the message tool relies on this to
+    // distinguish action=no_reply from a (failed) send.
+    projector.recordToolCallAction("call-1", { action: "no_reply" });
+    await projector.handleNotification(
+      forCurrentTurn("item/completed", {
+        item: { type: "dynamicToolCall", id: "call-1", tool: "message", status: "completed" },
+      }),
+    );
+
+    expect(onAgentEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stream: "item",
+        data: expect.objectContaining({
+          kind: "tool",
+          name: "message",
+          phase: "end",
+          status: "completed",
+          action: "no_reply",
+        }),
+      }),
+    );
+  });
+
+  it("parses stringified tool-call arguments and omits action when absent", async () => {
+    const onAgentEvent = vi.fn();
+    const projector = createProjector({ ...createParams(), onAgentEvent });
+
+    projector.recordToolCallAction("call-send", '{"action":"send","text":"hi"}');
+    projector.recordToolCallAction("call-bare", { text: "no action here" });
+    await projector.handleNotification(
+      forCurrentTurn("item/completed", {
+        item: { type: "dynamicToolCall", id: "call-send", tool: "message", status: "completed" },
+      }),
+    );
+    await projector.handleNotification(
+      forCurrentTurn("item/completed", {
+        item: { type: "dynamicToolCall", id: "call-bare", tool: "message", status: "completed" },
+      }),
+    );
+
+    const itemEvents = onAgentEvent.mock.calls
+      .map((invocation) => invocation[0])
+      .filter((event) => event.stream === "item");
+    const sendEvent = itemEvents.find((event) => event.data.itemId === "call-send");
+    const bareEvent = itemEvents.find((event) => event.data.itemId === "call-bare");
+    expect(sendEvent?.data.action).toBe("send");
+    expect(bareEvent?.data).not.toHaveProperty("action");
+  });
 });

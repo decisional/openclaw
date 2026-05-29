@@ -185,6 +185,11 @@ export async function runCodexAppServerAttempt(
     if (!call || call.threadId !== thread.threadId || call.turnId !== turnId) {
       return undefined;
     }
+    // Surface the tool-call action on the projected `item` event. Codex sends
+    // arguments here (separate from the item lifecycle notifications), and this
+    // request always precedes the matching item/completed, so the action is
+    // available by the time the completed item event is emitted.
+    projector?.recordToolCallAction(call.callId, call.arguments);
     return toolBridge.handleToolCall(call) as Promise<JsonValue>;
   });
 
